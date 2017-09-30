@@ -1,3 +1,4 @@
+blinker==1.4
 click==6.7
 Flask==0.12.2
 Flask-Login==0.4.0
@@ -11,6 +12,7 @@ MarkupSafe==1.0
 oauth2client==4.1.2
 pyasn1==0.3.6
 pyasn1-modules==0.1.4
+raven==6.2.1
 rsa==3.4.2
 six==1.11.0
 SQLAlchemy==1.1.14

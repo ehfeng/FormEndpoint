@@ -17,10 +17,12 @@ from oauth2client.client import (
     HttpAccessTokenRefreshError,
     OAuth2WebServerFlow
 )
+from raven.contrib.flask import Sentry
 
 app = Flask(__name__)
 login_manager = LoginManager()
 login_manager.init_app(app)
+sentry = Sentry(app)
 
 def get_flow():
     flow = OAuth2WebServerFlow(
