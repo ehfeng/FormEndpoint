@@ -3,6 +3,7 @@
 import httplib2
 import os
 
+from apiclient import discovery
 from flask import (
     Flask, redirect,
 )
@@ -11,8 +12,10 @@ from flask_login import (
     LoginManager,
     login_required,
     login_user,
-    logout_user
+    logout_user,
+    UserMixin,
 )
+from flask_sqlalchemy import SQLAlchemy
 from oauth2client.client import (
     HttpAccessTokenRefreshError,
     OAuth2WebServerFlow
@@ -20,9 +23,20 @@ from oauth2client.client import (
 from raven.contrib.flask import Sentry
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 sentry = Sentry(app)
+db = SQLAlchemy(app)
+
+##########
+# Models #
+##########
+
+class User(db.Model, UserMixin):
+    id = db.Column(db.Integer, primary_key=True)
+
 
 def get_flow():
     flow = OAuth2WebServerFlow(
@@ -35,6 +49,9 @@ def get_flow():
     flow.params['prompt'] = 'consent'
     return flow
 
+##########
+# Routes #
+##########
 
 @app.route("/")
 def hello():
@@ -54,3 +71,12 @@ def login():
 def auth_finish():
     credentials = get_flow().step2_exchange(request.args.get('code'))
     http = credentials.authorize(httplib2.Http())
+    discoveryUrl = ('https://sheets.googleapis.com/$discovery/rest?'
+                    'version=v4')
+    service = discovery.build('sheets', 'v4', http=http,
+                              discoveryServiceUrl=discoveryUrl)
+
+@app.route('/logout')
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
