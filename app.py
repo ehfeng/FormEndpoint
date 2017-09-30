@@ -7,6 +7,7 @@ from apiclient import discovery
 from flask import (
     abort,
     Flask,
+    g,
     json,
     redirect,
     render_template,
@@ -55,6 +56,14 @@ def get_flow():
     flow.params['prompt'] = 'consent'
     return flow
 
+
+@app.errorhandler(500)
+def internal_server_error(error):
+    return render_template('500.html',
+        event_id=g.sentry_event_id,
+        public_dsn=sentry.client.get_public_dsn('https')
+    )
+
 ##########
 # Routes #
 ##########
@@ -87,3 +96,8 @@ def auth_finish():
 def logout():
     logout_user()
     return redirect(url_for('index'))
+
+
+@app.route('/500')
+def test_error():
+    assert False
