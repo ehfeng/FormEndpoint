@@ -5,7 +5,13 @@ import os
 
 from apiclient import discovery
 from flask import (
-    Flask, redirect,
+    abort,
+    Flask,
+    json,
+    redirect,
+    render_template,
+    request,
+    url_for
 )
 from flask_login import (
     current_user,
@@ -55,7 +61,7 @@ def get_flow():
 
 @app.route("/")
 def hello():
-    return "FormEndpoint"
+    return render_template('index.html')
 
 
 @app.route('/login')
@@ -75,6 +81,7 @@ def auth_finish():
                     'version=v4')
     service = discovery.build('sheets', 'v4', http=http,
                               discoveryServiceUrl=discoveryUrl)
+
 
 @app.route('/logout')
 def logout():
