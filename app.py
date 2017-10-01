@@ -22,6 +22,7 @@ from flask_login import (
     logout_user,
     UserMixin,
 )
+from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from oauth2client.client import (
     HttpAccessTokenRefreshError,
@@ -36,6 +37,7 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 sentry = Sentry(app)
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 ##########
 # Models #
@@ -44,6 +46,9 @@ db = SQLAlchemy(app)
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
 
+###########
+# Helpers #
+###########
 
 def get_flow():
     flow = OAuth2WebServerFlow(
