@@ -4,6 +4,7 @@ import httplib2
 import os
 
 from apiclient import discovery
+import click
 from flask import (
     abort,
     Flask,
@@ -32,6 +33,7 @@ from raven.contrib.flask import Sentry
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -45,6 +47,18 @@ migrate = Migrate(app, db)
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.Text, unique=True, nullable=False)
+
+############
+# Commands #
+############
+
+@app.cli.command()
+@click.option('--email', prompt="Email")
+def createuser(email):
+    click.echo(email)
+    db.session.add(User(email=email))
+    db.session.commit()
 
 ###########
 # Helpers #
@@ -54,7 +68,7 @@ def get_flow():
     flow = OAuth2WebServerFlow(
         client_id=os.environ['GOOGLE_CLIENT_ID'],
         client_secret=os.environ['GOOGLE_CLIENT_SECRET'],
-        scope='https://www.googleapis.com/auth/spreadsheets',
+        scope='email',
         redirect_uri=os.environ['GOOGLE_REDIRECT_URI'],
         )
     flow.params['access_type'] = 'offline'
@@ -73,13 +87,20 @@ def internal_server_error(error):
 # Routes #
 ##########
 
-@app.route("/")
-def hello():
+@app.route('/')
+def index():
     return render_template('index.html')
 
 
-@app.route('/login')
+@app.route('/login', methods=['GET', 'POST'])
 def login():
+    if request.method == 'POST':
+        return redirect(url_for('index'))
+    return render_template('login.html')
+
+
+@app.route('/auth-start')
+def auth_start():
     if (current_user.is_authenticated and current_user.credentials and
         (current_user.credentials.refresh_token or
         request.args.get('force') != 'True')):
@@ -95,6 +116,7 @@ def auth_finish():
                     'version=v4')
     service = discovery.build('sheets', 'v4', http=http,
                               discoveryServiceUrl=discoveryUrl)
+    # service = discovery.
 
 
 @app.route('/logout')
