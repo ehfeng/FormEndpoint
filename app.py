@@ -17,6 +17,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_from_directory,
     url_for
 )
 from flask_login import (
@@ -86,7 +87,7 @@ class User(db.Model, UserMixin):
             self.credentials_json = cred.to_json()
         else:
             self.credentials_json = cred
-    
+
     @property
     def sheets(self):
         http = self.credentials.authorize(httplib2.Http())
@@ -96,6 +97,33 @@ class User(db.Model, UserMixin):
         self.validation_hash = uuid.uuid4().hex
         self.validation_hash_added = datetime.datetime.now()
 
+
+class GoogleSheet(object):
+    @staticmethod
+    def find_furthest_empty_row(data, ranges):
+        return
+
+    @staticmethod
+    def insert_form(at_row, ranges):
+        """
+        [{
+            "range": string,
+            "values": [string, ...]
+        }, ...]
+
+        https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values#ValueRange
+        """
+        return
+
+    @staticmethod
+    def convert_to_column_title(num):
+        title = ''
+        alist = string.ascii_uppercase
+        while num:
+            mod = (num-1) % 26
+            num = int((num - mod) / 26)
+            title += alist[mod]
+        return title[::-1]
 
 ###########
 # Helpers #
@@ -181,32 +209,10 @@ def test_error():
     assert False
 
 
-class GoogleSheet(object):
-    @staticmethod
-    def find_furthest_empty_row(data, ranges):
-        return
-
-    @staticmethod
-    def insert_form(at_row, ranges):
-        """
-        [{
-            "range": string,
-            "values": [string, ...]
-        }, ...]
-
-        https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values#ValueRange
-        """
-        return
-
-    @staticmethod
-    def convert_to_column_title(num):
-        title = ''
-        alist = string.ascii_uppercase
-        while num:
-            mod = (num-1) % 26
-            num = int((num - mod) / 26)  
-            title += alist[mod]
-        return title[::-1]
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 
 @app.route('/<username>', methods=['GET', 'POST'])
