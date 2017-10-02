@@ -1,18 +1,16 @@
 # FormEndpoint
 
-POST forms to Google Sheets without writing code.
+POST forms to Google Sheets with no backend code.
 
-## Steps
-
-1. Link your spreadsheet to FormEndpoint
-
-2. Add your form
+1. Add your form
 
 ```html
 <form method="POST" action="https://formendpoint.com/demo">
-	<input type="text" name="column_name">
-	<button type="submit"></button>
+    <input type="hidden" name="spreadsheet_id" value="https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/">
+
+    <input type="text" name="email">
+    <button type="submit"></button>
 </form>
 ```
 
-3. Collect submissions
+2. Collect submissions
