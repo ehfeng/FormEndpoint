@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
+import datetime
 import httplib2
 import os
+import uuid
 
 from apiclient import discovery
 import click
@@ -27,13 +29,24 @@ from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from oauth2client.client import (
     HttpAccessTokenRefreshError,
-    OAuth2WebServerFlow
+    OAuth2WebServerFlow,
+    OAuth2Credentials,
 )
 from raven.contrib.flask import Sentry
+from sqlalchemy.dialects.postgresql import JSONB
+
+GOOGLE_SHEETS_DISCOVERY_URL = 'https://sheets.googleapis.com/$discovery/rest?version=v4'
+PROFILE_EMBED_TEMPLATE = """<form method="POST" action="%s">
+    <input type="hidden" name="_spreadsheet_id" value="YOUR GOOGLE SHEET ID OR URL">
+    <input type="text" name="YOUR COLUMN NAME">
+</form>"""
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SERVER_NAME'] = os.environ['SERVER_NAME']
+app.config['PREFERRED_URL_SCHEME'] = os.environ['PREFERRED_URL_SCHEME']
+app.secret_key = os.environ['FLASK_SECRET_KEY']
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -48,28 +61,51 @@ migrate = Migrate(app, db)
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.Text, unique=True, nullable=False)
+    username = db.Column(db.String, unique=True)
+    verified = db.Column(db.Boolean, default=False)
+    credentials_json = db.Column(JSONB)
 
-############
-# Commands #
-############
+    validation_hash = db.Column(db.Text)
+    validation_hash_added = db.Column(db.DateTime)
 
-@app.cli.command()
-@click.option('--email', prompt="Email")
-def createuser(email):
-    click.echo(email)
-    db.session.add(User(email=email))
-    db.session.commit()
+    @property
+    def credentials(self):
+        if self.credentials_json:
+            return OAuth2Credentials.from_json(self.credentials_json)
+        else:
+            return None
+
+    @credentials.setter
+    def credentials(self, cred):
+        if type(cred) is OAuth2Credentials:
+            self.credentials_json = cred.to_json()
+        else:
+            self.credentials_json = cred
+    
+    @property
+    def sheets(self):
+        self.credentials.authorize(httplib2.Http())
+        return build('sheets', 'v4', http=http, discoveryServiceUrl=GOOGLE_SHEETS_DISCOVERY_URL)
+
+    def refresh_validation_hash(self):
+        self.validation_hash = uuid.uuid4().hex
+        self.validation_hash_added = datetime.datetime.now()
 
 ###########
 # Helpers #
 ###########
 
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(user_id)
+
+
 def get_flow():
     flow = OAuth2WebServerFlow(
         client_id=os.environ['GOOGLE_CLIENT_ID'],
         client_secret=os.environ['GOOGLE_CLIENT_SECRET'],
-        scope='email',
-        redirect_uri=os.environ['GOOGLE_REDIRECT_URI'],
+        scope='https://www.googleapis.com/auth/spreadsheets',
+        redirect_uri=url_for('auth_finish', _external=True),
         )
     flow.params['access_type'] = 'offline'
     flow.params['prompt'] = 'consent'
@@ -83,6 +119,11 @@ def internal_server_error(error):
         public_dsn=sentry.client.get_public_dsn('https')
     )
 
+
+@app.route('/500')
+def test_error():
+    assert False
+
 ##########
 # Routes #
 ##########
@@ -92,39 +133,74 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        return redirect(url_for('index'))
-    return render_template('login.html')
+@app.route('/login/<validation_hash>')
+def login(validation_hash):
+    user = User.query.filter_by(validation_hash=validation_hash).first()
+    if user and user.validation_hash_added and user.validation_hash_added > datetime.datetime.now() - datetime.timedelta(hours=4):
+        login_user(user)
+    return redirect(url_for('profile', username=user.username))
 
 
+@login_required
 @app.route('/auth-start')
 def auth_start():
     if (current_user.is_authenticated and current_user.credentials and
         (current_user.credentials.refresh_token or
         request.args.get('force') != 'True')):
-        return redirect(request.args.get('next') or url_for('home'))
+        return redirect(request.args.get('next') or url_for('profile', username=current_user.username))
     return redirect(get_flow().step1_get_authorize_url())
 
 
+@login_required
 @app.route('/auth-finish')
 def auth_finish():
     credentials = get_flow().step2_exchange(request.args.get('code'))
     http = credentials.authorize(httplib2.Http())
-    discoveryUrl = ('https://sheets.googleapis.com/$discovery/rest?'
-                    'version=v4')
     service = discovery.build('sheets', 'v4', http=http,
-                              discoveryServiceUrl=discoveryUrl)
-    # service = discovery.
+                              discoveryServiceUrl=GOOGLE_SHEETS_DISCOVERY_URL)
+    current_user.credentials_json = credentials.to_json()
+    db.session.add(current_user)
+    db.session.commit()
+    return redirect('profile', username=current_user.username)
 
 
+@login_required
 @app.route('/logout')
 def logout():
     logout_user()
     return redirect(url_for('index'))
 
 
-@app.route('/500')
-def test_error():
-    assert False
+@app.route('/<username>', methods=['GET', 'POST'])
+def profile(username):
+    if request.method == 'POST':
+        user = User.query.filter_by(username=username).first()
+        spreadsheet = user.sheets.spreadsheets().get(request.form['_spreadsheet_id']).execute()
+        return redirect(request.args.get('next'))
+
+    embed_form = PROFILE_EMBED_TEMPLATE % url_for('profile', username=current_user.username, _external=True)
+    return render_template('profile.html', embed_form=embed_form)
+
+############
+# Commands #
+############
+
+@app.cli.command()
+@click.option('--email', prompt="Email")
+@click.option('--username', prompt="username")
+def createuser(email, username):
+    db.session.add(User(email=email, username=username))
+    db.session.commit()
+
+
+@app.cli.command()
+@click.option('--email', prompt="Email")
+def login(email):
+    user = User.query.filter_by(email=email).first()
+    if user:
+        user.refresh_validation_hash()
+        db.session.add(user)
+        db.session.commit()
+        click.echo('Login at %s' % url_for('login', validation_hash=user.validation_hash))
+    else:
+        click.echo('%s doesn\'t exist. Run `flask createuser`')

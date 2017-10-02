@@ -5,6 +5,10 @@
 </head>
 <body>
 	<h1>Welcome to FormEndpoint</h1>
-	<div><a href="/login">Login</a></div>
+	<div>
+	{% if current_user.is_authenticated %}
+		Hi {{ current_user.username }}
+	{% endif %}
+	</div>
 </body>
 </html>

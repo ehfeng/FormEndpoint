@@ -2,7 +2,7 @@
 	"scripts": {
 		"dokku": {
 			"predeploy": "curl -sL https://sentry.io/get-cli/ | bash",
-			"postdeploy": "VERSION=$GIT_REV; sentry-cli releases new -p formendpoint $VERSION; sentry-cli releases set-commits $VERSION --commit ehfeng/FormEndpoint@$VERSION"
+			"postdeploy": "flask db upgrade; VERSION=$GIT_REV; sentry-cli releases new -p formendpoint $VERSION; sentry-cli releases set-commits $VERSION --commit ehfeng/FormEndpoint@$VERSION"
 		}
 	}
 }
