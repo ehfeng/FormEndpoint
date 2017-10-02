@@ -268,7 +268,7 @@ def profile(username):
 
 @app.route('/<username>/success')
 def success(username):
-    if current_user.is_authenticated():
+    if current_user.is_authenticated:
         return "Setup your form to redirect anywhere by using the next parameter."
     return "Success!"
 
