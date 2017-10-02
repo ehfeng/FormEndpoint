@@ -4,10 +4,10 @@
 	<title>FormEndpoint</title>
 </head>
 <body>
-	<h1>Welcome to FormEndpoint</h1>
+	<h1>FormEndpoint</h1>
 	<div>
 	{% if current_user.is_authenticated %}
-		Hi {{ current_user.username }}
+		<a href="{{ url_for('profile', username=current_user.username) }}">{{ current_user.username }}</a>
 	{% endif %}
 	</div>
 </body>

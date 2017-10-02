@@ -7,9 +7,14 @@
 	<h1>{{current_user.username }} Profile</h1>
 	<br>
 	<div>
+		{% if current_user.credentials %}
 		<pre>
+		}
 {{ embed_form }}
 		</pre>
+		{% else %}
+		<a href="{{ url_for('auth_start') }}">Link Google Sheets</a>
+		{% endif %}
 	</div>
 </body>
 </html>
