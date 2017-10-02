@@ -3,6 +3,8 @@
 import datetime
 import httplib2
 import os
+import re
+import string
 import uuid
 
 from apiclient import discovery
@@ -39,7 +41,10 @@ GOOGLE_SHEETS_DISCOVERY_URL = 'https://sheets.googleapis.com/$discovery/rest?ver
 PROFILE_EMBED_TEMPLATE = """<form method="POST" action="%s">
     <input type="hidden" name="_spreadsheet_id" value="YOUR GOOGLE SHEET ID OR URL">
     <input type="text" name="YOUR COLUMN NAME">
+
+    <button type="submit"></button>
 </form>"""
+GOOGLE_SHEET_URL_PATTERN = re.compile("^https\://docs\.google\.com/spreadsheets/d/(\S+)/.*")
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
@@ -84,12 +89,13 @@ class User(db.Model, UserMixin):
     
     @property
     def sheets(self):
-        self.credentials.authorize(httplib2.Http())
-        return build('sheets', 'v4', http=http, discoveryServiceUrl=GOOGLE_SHEETS_DISCOVERY_URL)
+        http = self.credentials.authorize(httplib2.Http())
+        return discovery.build('sheets', 'v4', http=http, discoveryServiceUrl=GOOGLE_SHEETS_DISCOVERY_URL)
 
     def refresh_validation_hash(self):
         self.validation_hash = uuid.uuid4().hex
         self.validation_hash_added = datetime.datetime.now()
+
 
 ###########
 # Helpers #
@@ -119,10 +125,9 @@ def internal_server_error(error):
         public_dsn=sentry.client.get_public_dsn('https')
     )
 
-
-@app.route('/500')
-def test_error():
-    assert False
+def handle_post(user, form):
+    form.get('_spreadsheet_id')
+    return
 
 ##########
 # Routes #
@@ -171,15 +176,93 @@ def logout():
     return redirect(url_for('index'))
 
 
+@app.route('/500')
+def test_error():
+    assert False
+
+
+class GoogleSheet(object):
+    @staticmethod
+    def find_furthest_empty_row(data, ranges):
+        return
+
+    @staticmethod
+    def insert_form(at_row, ranges):
+        """
+        [{
+            "range": string,
+            "values": [string, ...]
+        }, ...]
+
+        https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values#ValueRange
+        """
+        return
+
+    @staticmethod
+    def convert_to_column_title(num):
+        title = ''
+        alist = string.ascii_uppercase
+        while num:
+            mod = (num-1) % 26
+            num = int((num - mod) / 26)  
+            title += alist[mod]
+        return title[::-1]
+
+
 @app.route('/<username>', methods=['GET', 'POST'])
 def profile(username):
     if request.method == 'POST':
+        form_data = request.form.copy()
+        spreadsheet_id = form_data.pop('_spreadsheet_id')
+        assert spreadsheet_id
+
         user = User.query.filter_by(username=username).first()
-        spreadsheet = user.sheets.spreadsheets().get(request.form['_spreadsheet_id']).execute()
-        return redirect(request.args.get('next'))
+        spreadsheet = user.sheets.spreadsheets().get(
+            spreadsheetId=spreadsheet_id,
+            includeGridData=True).execute()
+
+        columnar_named_ranges = {
+            r['name']: r['namedRangeId'] for r in spreadsheet.get('namedRanges', [])
+            if r['range'].get('startRowIndex') == None
+        }
+
+        if columnar_named_ranges:
+            furthest_row = GoogleSheet.find_furthest_empty_row(spreadsheet['sheets']['data'], columnar_named_ranges)
+            update_value_ranges = GoogleSheet.insert_form(row=furthest_row, ranges=columnar_named_ranges)
+        else:
+
+            first_row = next(iter(spreadsheet['sheets'][0]['data'][0].get('rowData', [])), None)
+            if first_row:
+                sheet_column_headers = [c.get('effectiveValue', {}).get('stringValue', None) for c in first_row['values']]
+                append_row = []
+                for header in sheet_column_headers:
+                    append_row.append(form_data.get(header, None))
+
+                body = {
+                    'majorDimension': 'ROWS',
+                    'values': [append_row]
+                }
+
+                user.sheets.spreadsheets().values().append(
+                    spreadsheetId=spreadsheet_id,
+                    range='A:%s' % GoogleSheet.convert_to_column_title(len(sheet_column_headers)),
+                    valueInputOption='RAW',
+                    body=body).execute()
+
+        if request.args.get('next'):
+            return redirect(request.args.get('next'))
+        else:
+            return redirect(url_for('success', username=user.username, _external=True))
 
     embed_form = PROFILE_EMBED_TEMPLATE % url_for('profile', username=current_user.username, _external=True)
     return render_template('profile.html', embed_form=embed_form)
+
+
+@app.route('/<username>')
+def success(username):
+    if current_user.is_authenticated():
+        return "Setup redirect"
+    return "Success!"
 
 ############
 # Commands #
