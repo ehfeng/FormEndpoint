@@ -254,14 +254,16 @@ def profile(username):
         else:
             return redirect(url_for('success', username=user.username, _external=True))
 
-    embed_form = PROFILE_EMBED_TEMPLATE % url_for('profile', username=current_user.username, _external=True)
-    return render_template('profile.html', embed_form=embed_form)
+    if current_user.is_authenticated():
+        embed_form = PROFILE_EMBED_TEMPLATE % url_for('profile', username=current_user.username, _external=True)
+        return render_template('profile.html', embed_form=embed_form)
+    return redirect(url_for('index'))
 
 
-@app.route('/<username>')
+@app.route('/<username>/success')
 def success(username):
     if current_user.is_authenticated():
-        return "Setup redirect"
+        return "Setup your form to redirect anywhere by using the next parameter."
     return "Success!"
 
 ############
