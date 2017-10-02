@@ -166,7 +166,7 @@ def auth_finish():
     current_user.credentials_json = credentials.to_json()
     db.session.add(current_user)
     db.session.commit()
-    return redirect('profile', username=current_user.username)
+    return redirect(url_for('profile', username=current_user.username))
 
 
 @login_required
