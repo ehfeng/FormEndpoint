@@ -17,14 +17,7 @@
 {{ demo_html }}
 		</pre>
 		<h3>2. Submit an email</h3>
-		<br>
-		<form method="POST" action="https://formendpoint.com/ehfeng">
-		    <input type="hidden" name="_spreadsheet_id" value="https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/edit?usp=sharing">
-		    <input type="email" name="email">
-
-		    <button type="submit">Submit</button>
-		</form>
-		<br>
+		{{ demo_html | safe }}
 		<h3>3. View it in the <a href="https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/edit?usp=sharing">Google Sheet</a>.</h3>
 		<br>
 		<h3>Waitlist Signup</h3>

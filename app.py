@@ -42,13 +42,13 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 GOOGLE_SHEETS_DISCOVERY_URL = 'https://sheets.googleapis.com/$discovery/rest?version=v4'
 PROFILE_EMBED_TEMPLATE = """<form method="POST" action="%s">
-    <input type="hidden" name="_spreadsheet_id" value="YOUR GOOGLE SHEET ID OR URL">
+    <input type="hidden" name="_spreadsheet_url" value="YOUR GOOGLE SHEET URL">
     <input type="text" name="YOUR COLUMN NAME">
 
     <button type="submit"></button>
 </form>"""
 DEMO_HTML = """<form method="POST" action="https://formendpoint.com/demo">
-    <input type="hidden" name="_spreadsheet_id" value="https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/edit?usp=sharing">
+    <input type="hidden" name="_spreadsheet_url" value="https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/edit?usp=sharing">
     <input type="email" name="email">
 
     <button type="submit">Submit</button>
