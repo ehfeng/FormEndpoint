@@ -47,7 +47,7 @@ PROFILE_EMBED_TEMPLATE = """<form method="POST" action="%s">
 
     <button type="submit"></button>
 </form>"""
-DEMO_HTML = """<form method="POST" action="https://formendpoint.com/demo">
+DEMO_HTML = """<form method="POST" action="%s://%s/demo">
     <input type="hidden" name="_spreadsheet_url" value="https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/edit?usp=sharing">
     <input type="email" name="email">
 
@@ -213,7 +213,7 @@ def internal_server_error(error):
 
 @app.route('/')
 def index():
-    return render_template('index.html', demo_html=DEMO_HTML)
+    return render_template('index.html', demo_html=DEMO_HTML  % (app.config['PREFERRED_URL_SCHEME'], app.config['SERVER_NAME']))
 
 
 @app.route('/login/<validation_hash>')
@@ -270,15 +270,15 @@ def favicon():
 def profile(username):
     if request.method == 'POST':
         form_data = request.form.copy()
-        spreadsheet_id = form_data.pop('_spreadsheet_id')
-        if not spreadsheet_id:
+        if '_spreadsheet_id' in form_data:
+            spreadsheet_id = form_data.pop('_spreadsheet_id')
+        elif '_spreadsheet_url' in form_data:
             spreadsheet_url = form_data.pop('_spreadsheet_url')
-            if spreadsheet_url:
-                spreadsheet_id = GOOGLE_SHEET_URL_PATTERN.search(spreadsheet_url).group(1)
+            spreadsheet_id = GOOGLE_SHEET_URL_PATTERN.search(spreadsheet_url).group(1)
 
         user = User.query.filter_by(username=username).first()
         insert_form.delay(user.id, spreadsheet_id, form_data)
-
+        
         if request.args.get('next'):
             return redirect(request.args.get('next'))
         else:
