@@ -47,6 +47,12 @@ PROFILE_EMBED_TEMPLATE = """<form method="POST" action="%s">
 
     <button type="submit"></button>
 </form>"""
+DEMO_HTML = """<form method="POST" action="https://formendpoint.com/demo">
+    <input type="hidden" name="_spreadsheet_id" value="https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/edit?usp=sharing">
+    <input type="email" name="email">
+
+    <button type="submit">Submit</button>
+</form>"""
 GOOGLE_SHEET_URL_PATTERN = re.compile("^https\://docs\.google\.com/spreadsheets/d/(\S+)/.*")
 
 def make_celery(app):
@@ -207,7 +213,7 @@ def internal_server_error(error):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', demo_html=DEMO_HTML)
 
 
 @app.route('/login/<validation_hash>')
@@ -278,7 +284,7 @@ def profile(username):
         else:
             return redirect(url_for('success', username=user.username, _external=True))
 
-    if current_user.is_authenticated():
+    if current_user.is_authenticated:
         embed_form = PROFILE_EMBED_TEMPLATE % url_for('profile', username=current_user.username, _external=True)
         return render_template('profile.html', embed_form=embed_form)
     return redirect(url_for('index'))

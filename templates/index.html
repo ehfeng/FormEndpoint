@@ -9,19 +9,21 @@
 	{% if current_user.is_authenticated %}
 		<a href="{{ url_for('profile', username=current_user.username) }}">{{ current_user.username }}</a>
 	{% else %}
-		<h3>Try it out!</h3>
-		<div>Submit an email; it shows up on Google Sheets! Please be nice.</div>
+		<h2>Setting it up</h2>
+		<h3>1. Point your form at FormEndpoint</h3>
+		<pre>
+{{ demo_html }}
+		</pre>
+		<h3>2. Submit an email</h3>
 		<br>
 		<form method="POST" action="https://formendpoint.com/ehfeng">
-		    <input type="hidden" name="_spreadsheet_id" value="1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8">
+		    <input type="hidden" name="_spreadsheet_id" value="https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/edit?usp=sharing">
 		    <input type="email" name="email">
 
 		    <button type="submit">Submit</button>
 		</form>
 		<br>
-		<div>
-			<a href="https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/edit?usp=sharing">Google Sheet destination</a>
-		</div>
+		<h3>3. View it in the <a href="https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/edit?usp=sharing">Google Sheet</a>.</h3>
 		<br>
 		<h3>Waitlist Signup</h3>
 		<div>Hi, this is (obviously) very much under construction. If you're interested in playing around with it, let me know below, and I can create an account for you.</div>
