@@ -265,6 +265,11 @@ def profile(username):
     if request.method == 'POST':
         form_data = request.form.copy()
         spreadsheet_id = form_data.pop('_spreadsheet_id')
+        if not spreadsheet_id:
+            spreadsheet_url = form_data.pop('_spreadsheet_url')
+            if spreadsheet_url:
+                spreadsheet_id = GOOGLE_SHEET_URL_PATTERN.search(spreadsheet_url).group(1)
+
         user = User.query.filter_by(username=username).first()
         insert_form.delay(user.id, spreadsheet_id, form_data)
 

@@ -5,7 +5,7 @@
 ## Setup
 
 1. Set the form `action` to your FormEndpoint URL. 
-2. Add a hidden input with `name=_spreadsheet_id` and `value` of your Google Sheet URL.
+2. Add a hidden input with your Google Sheet URL: `<input type="hidden" name="_spreadsheet_url" value="GOOGLE_SHEET_URL">`.
 3. Deploy!
 
 ## Example
