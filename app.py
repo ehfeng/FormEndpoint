@@ -8,6 +8,7 @@ import string
 import uuid
 
 from apiclient import discovery
+from celery import Celery
 import click
 from flask import (
     abort,
@@ -47,11 +48,26 @@ PROFILE_EMBED_TEMPLATE = """<form method="POST" action="%s">
 </form>"""
 GOOGLE_SHEET_URL_PATTERN = re.compile("^https\://docs\.google\.com/spreadsheets/d/(\S+)/.*")
 
+def make_celery(app):
+    celery = Celery(app.import_name, backend=app.config['CELERY_RESULT_BACKEND'],
+                    broker=app.config['CELERY_BROKER_URL'])
+    celery.conf.update(app.config)
+    TaskBase = celery.Task
+    class ContextTask(TaskBase):
+        abstract = True
+        def __call__(self, *args, **kwargs):
+            with app.app_context():
+                return TaskBase.__call__(self, *args, **kwargs)
+    celery.Task = ContextTask
+    return celery
+
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SERVER_NAME'] = os.environ['SERVER_NAME']
 app.config['PREFERRED_URL_SCHEME'] = os.environ['PREFERRED_URL_SCHEME']
+app.config['CELERY_RESULT_BACKEND'] = os.environ['REDIS_URL']
+app.config['CELERY_BROKER_URL'] = os.environ['REDIS_URL']
 app.secret_key = os.environ['FLASK_SECRET_KEY']
 
 login_manager = LoginManager()
@@ -59,6 +75,7 @@ login_manager.init_app(app)
 sentry = Sentry(app)
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+celery = make_celery(app)
 
 ##########
 # Models #
@@ -125,6 +142,14 @@ class GoogleSheet(object):
             title += alist[mod]
         return title[::-1]
 
+#########
+# Tasks #
+#########
+
+@celery.task()
+def add(a, b):
+    return a + b
+
 ###########
 # Helpers #
 ###########
@@ -152,10 +177,6 @@ def internal_server_error(error):
         event_id=g.sentry_event_id,
         public_dsn=sentry.client.get_public_dsn('https')
     )
-
-def handle_post(user, form):
-    form.get('_spreadsheet_id')
-    return
 
 ##########
 # Routes #
