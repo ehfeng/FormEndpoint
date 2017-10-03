@@ -36,6 +36,7 @@ from oauth2client.client import (
     OAuth2WebServerFlow,
     OAuth2Credentials,
 )
+from raven.contrib.celery import register_signal, register_logger_signal
 from raven.contrib.flask import Sentry
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -72,10 +73,13 @@ app.secret_key = os.environ['FLASK_SECRET_KEY']
 
 login_manager = LoginManager()
 login_manager.init_app(app)
-sentry = Sentry(app)
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 celery = make_celery(app)
+sentry = Sentry(app)
+
+register_logger_signal(sentry.client)
+register_signal(sentry.client)
 
 ##########
 # Models #
@@ -108,7 +112,7 @@ class User(db.Model, UserMixin):
     @property
     def sheets(self):
         http = self.credentials.authorize(httplib2.Http())
-        return discovery.build('sheets', 'v4', http=http, discoveryServiceUrl=GOOGLE_SHEETS_DISCOVERY_URL)
+        return discovery.build('sheets', 'v4', http=http, discoveryServiceUrl=GOOGLE_SHEETS_DISCOVERY_URL, cache_discovery=False)
 
     def refresh_validation_hash(self):
         self.validation_hash = uuid.uuid4().hex
@@ -118,18 +122,6 @@ class User(db.Model, UserMixin):
 class GoogleSheet(object):
     @staticmethod
     def find_furthest_empty_row(data, ranges):
-        return
-
-    @staticmethod
-    def insert_form(at_row, ranges):
-        """
-        [{
-            "range": string,
-            "values": [string, ...]
-        }, ...]
-
-        https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values#ValueRange
-        """
         return
 
     @staticmethod
@@ -147,8 +139,39 @@ class GoogleSheet(object):
 #########
 
 @celery.task()
-def add(a, b):
-    return a + b
+def insert_form(user_id, spreadsheet_id, form_data):
+    user = User.query.get(user_id)
+    spreadsheet = user.sheets.spreadsheets().get(
+        spreadsheetId=spreadsheet_id,
+        includeGridData=True).execute()
+
+    columnar_named_ranges = {
+        r['name']: r['namedRangeId'] for r in spreadsheet.get('namedRanges', [])
+        if r['range'].get('startRowIndex') == None
+    }
+
+    if columnar_named_ranges:
+        furthest_row = GoogleSheet.find_furthest_empty_row(spreadsheet['sheets']['data'], columnar_named_ranges)
+        # update_value_ranges = GoogleSheet.insert_form(row=furthest_row, ranges=columnar_named_ranges)
+
+    else:
+        first_row = next(iter(spreadsheet['sheets'][0]['data'][0].get('rowData', [])), None)
+        if first_row:
+            sheet_column_headers = [c.get('effectiveValue', {}).get('stringValue', None) for c in first_row['values']]
+            append_row = []
+            for header in sheet_column_headers:
+                append_row.append(form_data.get(header, None))
+
+            body = {
+                'majorDimension': 'ROWS',
+                'values': [append_row]
+            }
+
+            user.sheets.spreadsheets().values().append(
+                spreadsheetId=spreadsheet_id,
+                range='A:%s' % GoogleSheet.convert_to_column_title(len(sheet_column_headers)),
+                valueInputOption='RAW',
+                body=body).execute()
 
 ###########
 # Helpers #
@@ -211,7 +234,8 @@ def auth_finish():
     credentials = get_flow().step2_exchange(request.args.get('code'))
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('sheets', 'v4', http=http,
-                              discoveryServiceUrl=GOOGLE_SHEETS_DISCOVERY_URL)
+                              discoveryServiceUrl=GOOGLE_SHEETS_DISCOVERY_URL,
+                              cache_discovery=False)
     current_user.credentials_json = credentials.to_json()
     db.session.add(current_user)
     db.session.commit()
@@ -241,40 +265,8 @@ def profile(username):
     if request.method == 'POST':
         form_data = request.form.copy()
         spreadsheet_id = form_data.pop('_spreadsheet_id')
-        assert spreadsheet_id
-
         user = User.query.filter_by(username=username).first()
-        spreadsheet = user.sheets.spreadsheets().get(
-            spreadsheetId=spreadsheet_id,
-            includeGridData=True).execute()
-
-        columnar_named_ranges = {
-            r['name']: r['namedRangeId'] for r in spreadsheet.get('namedRanges', [])
-            if r['range'].get('startRowIndex') == None
-        }
-
-        if columnar_named_ranges:
-            furthest_row = GoogleSheet.find_furthest_empty_row(spreadsheet['sheets']['data'], columnar_named_ranges)
-            update_value_ranges = GoogleSheet.insert_form(row=furthest_row, ranges=columnar_named_ranges)
-        else:
-
-            first_row = next(iter(spreadsheet['sheets'][0]['data'][0].get('rowData', [])), None)
-            if first_row:
-                sheet_column_headers = [c.get('effectiveValue', {}).get('stringValue', None) for c in first_row['values']]
-                append_row = []
-                for header in sheet_column_headers:
-                    append_row.append(form_data.get(header, None))
-
-                body = {
-                    'majorDimension': 'ROWS',
-                    'values': [append_row]
-                }
-
-                user.sheets.spreadsheets().values().append(
-                    spreadsheetId=spreadsheet_id,
-                    range='A:%s' % GoogleSheet.convert_to_column_title(len(sheet_column_headers)),
-                    valueInputOption='RAW',
-                    body=body).execute()
+        insert_form.delay(user.id, spreadsheet_id, form_data)
 
         if request.args.get('next'):
             return redirect(request.args.get('next'))
