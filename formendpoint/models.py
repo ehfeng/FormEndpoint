@@ -4,6 +4,7 @@ import httplib2
 import string
 import uuid
 
+from apiclient import discovery
 from flask_login import UserMixin
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
@@ -14,8 +15,12 @@ from sqlalchemy.sql import func
 
 from app import app
 
+GOOGLE_SHEETS_DISCOVERY_URL = 'https://sheets.googleapis.com/$discovery/\
+    rest?version=v4'
+
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -44,7 +49,12 @@ class User(db.Model, UserMixin):
     @property
     def sheets(self):
         http = self.credentials.authorize(httplib2.Http())
-        return discovery.build('sheets', 'v4', http=http, discoveryServiceUrl=GOOGLE_SHEETS_DISCOVERY_URL, cache_discovery=False)
+        return discovery.build(
+                'sheets', 'v4',
+                http=http,
+                discoveryServiceUrl=GOOGLE_SHEETS_DISCOVERY_URL,
+                cache_discovery=False,
+            )
 
     def refresh_validation_hash(self):
         self.validation_hash = uuid.uuid4().hex
@@ -53,7 +63,8 @@ class User(db.Model, UserMixin):
 
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    submitted = db.Column(db.DateTime, server_default=func.now(), nullable=False)
+    submitted = db.Column(
+        db.DateTime, server_default=func.now(), nullable=False)
     origin = db.Column(db.Text, nullable=False)
     data = db.Column(db.JSON, nullable=False)
 

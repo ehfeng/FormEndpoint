@@ -18,4 +18,4 @@ sentry = Sentry(app)
 register_logger_signal(sentry.client)
 register_signal(sentry.client)
 
-from formendpoint import views
+from formendpoint import views  # NOQA

@@ -1,3 +1,10 @@
+from flask import url_for
+import click
+
+from app import app
+from formendpoint.models import db, User
+
+
 @app.cli.command()
 @click.option('--email', prompt="Email")
 @click.option('--username', prompt="username")
@@ -14,6 +21,8 @@ def login(email):
         user.refresh_validation_hash()
         db.session.add(user)
         db.session.commit()
-        click.echo('Login at %s' % url_for('login', validation_hash=user.validation_hash))
+        click.echo('Login at %s' %
+                   url_for('login', validation_hash=user.validation_hash)
+                   )
     else:
         click.echo('%s doesn\'t exist. Run `flask createuser`')
