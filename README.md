@@ -8,7 +8,7 @@
 
 ```html
 <form action="https://formendpoint.com/demo" method="POST">
-    
+   <!-- add inputs -->
 </form>
 ```
 

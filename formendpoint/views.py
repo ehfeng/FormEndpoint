@@ -1,8 +1,8 @@
 import datetime
 import os
-import re
 
 from flask import (
+    abort,
     g,
     redirect,
     render_template,
@@ -17,6 +17,7 @@ from flask_login import (
     login_user,
     logout_user,
 )
+from furl import furl
 from oauth2client.client import (
     # HttpAccessTokenRefreshError,
     OAuth2WebServerFlow,
@@ -25,27 +26,18 @@ from oauth2client.client import (
 
 from app import app, sentry
 from formendpoint.models import (
-    db, User,
-    # Post, Form, FormValidator, FormDestination, Webhook, Email, GoogleSheet,
+    db,
+    User,
+    Post,
+    Form,
+    # FormValidator, FormDestination, Webhook, Email, GoogleSheet,
 )
-from formendpoint.tasks import insert_form
+from formendpoint.tasks import process_post_request
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 
-PROFILE_EMBED_TEMPLATE = """<form method="POST" action="%s">
-    <input type="hidden" name="_spreadsheet_url" value="YOUR GOOGLE SHEET URL">
-    <input type="text" name="YOUR COLUMN NAME">
-
-    <button type="submit"></button>
-</form>"""
 DEMO_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/'  # NOQA
-DEMO_HTML = """<form method="POST" action="%s://%s/demo?destination=%s">
-    <input type="email" name="email">
-
-    <button type="submit">Submit</button>
-</form>"""
-GOOGLE_SHEET_URL_PATTERN = re.compile("^https\://docs\.google\.com/spreadsheets/d/(\S+)/.*")  # NOQA
 
 
 @login_manager.user_loader
@@ -74,14 +66,28 @@ def internal_server_error(error):
     )
 
 
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
+
+
+@app.route('/500')
+def test_error():
+    assert False
+
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    return render_template('index.html', demo_html=DEMO_HTML % (
-            app.config['PREFERRED_URL_SCHEME'],
-            app.config['SERVER_NAME'],
-            DEMO_SHEET_URL
-        )
-    )
+    url = furl(url_for('profile', username='demo', _external=True))
+    url.args['destination'] = DEMO_SHEET_URL
+    form = render_template('form.html', url=url.url, input='<input type="email" name="email">')
+    return render_template('index.html', form=form, demo_url=DEMO_SHEET_URL)
 
 
 @app.route('/login/<validation_hash>')
@@ -97,8 +103,7 @@ def login(validation_hash):
 @app.route('/auth-start')
 def auth_start():
     if (current_user.is_authenticated and current_user.credentials and
-            (current_user.credentials.refresh_token or
-                request.args.get('force') != 'True')):
+            (current_user.credentials.refresh_token or request.args.get('force') != 'True')):
         return redirect(request.args.get('next') or
                         url_for('profile', username=current_user.username))
     return redirect(get_flow().step1_get_authorize_url())
@@ -121,45 +126,47 @@ def logout():
     return redirect(url_for('index'))
 
 
-@app.route('/500')
-def test_error():
-    assert False
-
-
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory(
-            os.path.join(app.root_path, 'static'),
-            'favicon.ico', mimetype='image/vnd.microsoft.icon'
-        )
-
-
 @app.route('/<username>', methods=['GET', 'POST'])
 def profile(username):
+    """
+    Args:
+        destination: google sheet, webhook, form slug
+    """
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        abort(404)
+
     if request.method == 'POST':
-        form_data = request.form.copy()
-        if '_spreadsheet_id' in form_data:
-            spreadsheet_id = form_data.pop('_spreadsheet_id')
-        elif '_spreadsheet_url' in form_data:
-            spreadsheet_url = form_data.pop('_spreadsheet_url')
-            spreadsheet_id = GOOGLE_SHEET_URL_PATTERN.search(
-                spreadsheet_url).group(1)
+        if 'destination' in request.args:
+            form = Form.get_or_create_from_destination(request.args['destination'], user)
+        else:
+            form = Form.get_by_origin(request.headers.get('ORIGIN'), user)
+        ip_address = request.remote_addr if request.remote_addr != '127.0.0.1' \
+            else request.headers.get('X-Forwarded-For')
 
-        user = User.query.filter_by(username=username).first()
-        insert_form.delay(user.id, spreadsheet_id, form_data)
+        post = Post(
+            origin=request.args.get('ORIGIN'),
+            ip_address=ip_address,
+            user_agent=request.args.get('USER_AGENT'),
+            data=request.form.to_dict(),
+            user=user,
+            form=form,
+        )
+        db.session.add(post)
+        db.session.commit()
 
-        if request.args.get('next'):
+        process_post_request.delay(post.id, request.args.to_dict())
+
+        if form and form.redirect:
+            return redirect(form.redirect)
+        elif 'next' in request.args:
             return redirect(request.args.get('next'))
         else:
-            return redirect(
-                    url_for('success', username=user.username, _external=True)
-                )
+            return redirect(url_for('success', username=user.username, _external=True))
 
-    if current_user.is_authenticated:
-        embed_form = PROFILE_EMBED_TEMPLATE % url_for(
-            'profile', username=current_user.username, _external=True)
-        return render_template('profile.html', embed_form=embed_form)
-    return redirect(url_for('index'))
+    form = render_template('form.html', url=url_for('profile', username=current_user.username,
+                           _external=True))
+    return render_template('profile.html', form=form)
 
 
 @app.route('/<username>/success')

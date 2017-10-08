@@ -10,7 +10,7 @@
 	<div>
 		{% if current_user.credentials %}
 		<pre>
-{{ embed_form }}
+{{ form }}
 		</pre>
 		{% else %}
 		<a href="{{ url_for('auth_start') }}">Link Google Sheets</a>

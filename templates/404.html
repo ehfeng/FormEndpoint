@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+</head>
+<body>
+	{% if request.url_rule.endpoint == 'profile' %}
+	<div>Profile 404. TODO prompt to create an account for username {{ request.view_args.get('username') }}</div>
+	{% else %}
+	<div>Everything else</div>
+	{% endif %}
+</body>
+</html>

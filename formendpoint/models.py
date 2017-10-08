@@ -1,22 +1,26 @@
 import datetime
 from enum import Enum
 import httplib2
+import re
 import string
 import uuid
+from urllib.parse import urlparse
 
 from apiclient import discovery
 from flask_login import UserMixin
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
+from flask_sqlalchemy.model import camel_to_snake_case
 from oauth2client.client import OAuth2Credentials
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.sql import func
+from sqlalchemy.sql.expression import BinaryExpression, literal
+from sqlalchemy.sql.operators import custom_op
 
 from app import app
 
-GOOGLE_SHEETS_DISCOVERY_URL = 'https://sheets.googleapis.com/$discovery/\
-    rest?version=v4'
+GOOGLE_SHEETS_DISCOVERY_URL = 'https://sheets.googleapis.com/$discovery/rest?version=v4'
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
@@ -28,7 +32,6 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String, unique=True)
     verified = db.Column(db.Boolean, default=False)
     credentials_json = db.Column(JSONB)
-
     validation_hash = db.Column(db.Text)
     validation_hash_added = db.Column(db.DateTime)
 
@@ -63,11 +66,11 @@ class User(db.Model, UserMixin):
 
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    submitted = db.Column(
-        db.DateTime, server_default=func.now(), nullable=False)
+    submitted = db.Column(db.DateTime, server_default=func.now(), nullable=False)
     origin = db.Column(db.Text, nullable=False)
+    ip_address = db.Column(db.Text)
+    user_agent = db.Column(db.Text)
     data = db.Column(db.JSON, nullable=False)
-
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     form_id = db.Column(db.Integer, db.ForeignKey('form.id'), nullable=True)
 
@@ -75,30 +78,63 @@ class Post(db.Model):
 class Form(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
-    patterns = db.Column(db.ARRAY(db.String))
+    name = db.Column(db.Text)
+    redirect = db.Column(db.Text)
+    _origin = db.Column(db.String)  # ORIGIN POSIX regex
+
+    @property
+    def origin(self):
+        return re.sub('_', '?', re.sub('%', '*', self._origin))
+
+    @origin.setter
+    def origin(self, value):
+        self._origin = re.sub('\?', '_', re.sub('\*', '%', self.value))
+
+    @classmethod
+    def create_for_destination(cls):
+        """
+        Automatically create a Form for Google Sheet
+        """
+        return None
+
+    @classmethod
+    def reverse_ilike(cls, destination):
+        BinaryExpression(literal(destination), cls._origin, custom_op('ilike'))
+
+    @classmethod
+    def get_or_create_from_destination(cls, destination, user):
+        # forms = cls.query.filter(cls.user_id == user.id & cls.reverse_ilike(destination)).all()
+        # filter(lambda x: x.is_valid(destination), DestinationMixin.__subclasses__())
+        # TODO
+        raise NotImplemented
+
+    @classmethod
+    def get_by_origin(cls, origin, user):
+        # TODO
+        return None
+        raise NotImplemented
 
 
 class FormDatatypes(Enum):
     string = 0
+    boolean = 1
+    integer = 2
+    email = 3
+    url = 4
+    date = 5
+    time = 6
+    datetime = 7
+    enum = 8
+    list = 9
+    range = 10
+    file = 11
 
 
 class FormValidator(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.Text, nullable=False)
     datatype = db.Column(db.Enum(FormDatatypes), nullable=False)
-    form_id = db.Column(db.Integer, db.ForeignKey('form.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-
-
-class Destinations(Enum):
-    google_sheets = 0
-
-
-class FormDestination(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
-    type = db.Column(db.Enum(Destinations))
-    object_id = db.Column(db.Integer)
+    data = db.Column(JSONB)  # for enum, multiple, range constraints
     form_id = db.Column(db.Integer, db.ForeignKey('form.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
@@ -110,7 +146,7 @@ class DestinationMixin(object):
     """
     @declared_attr
     def __tablename__(cls):
-        return cls.__name__.lower()
+        return camel_to_snake_case(cls.__name__)
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -118,17 +154,43 @@ class DestinationMixin(object):
     def user_id(cls):
         return db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
+    @classmethod
+    def is_valid(cls, value):
+        """
+        Whether the value is valid for this `Destination` type.
+        Separate from whether destination value is "owned" by this account.
+        A way to auto-create `FormDestination`s from destination args.
+
+        Args:
+            value (str): where the data goes
+        Returns:
+            (bool)
+        """
+        raise NotImplemented
+
 
 class Webhook(db.Model, DestinationMixin):
     id = db.Column(db.Integer, primary_key=True)
+    verified_urls = db.Column(ARRAY(db.Text))
     template = db.Column(db.Text)
+
+    @classmethod
+    def is_valid(cls, value):
+        """Is this a secure url"""
+        url = urlparse(value)
+        return url.netloc and url.scheme == 'https'
 
 
 class Email(db.Model, DestinationMixin):
     template = db.Column(db.Text)
 
+    @classmethod
+    def is_valid(cls, value):
+        return False
+
 
 class GoogleSheet(db.Model, DestinationMixin):
+    URL_PATTERN = re.compile("^https\://docs\.google\.com/spreadsheets/d/(\S+)/.*")
 
     @staticmethod
     def find_furthest_empty_row(data, ranges):
@@ -143,3 +205,17 @@ class GoogleSheet(db.Model, DestinationMixin):
             num = int((num - mod) / 26)
             title += alist[mod]
         return title[::-1]
+
+    @classmethod
+    def is_valid(cls, value):
+        match = cls.URL_PATTERN.search(value)
+        return match and match.group(1)
+
+
+class FormDestination(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
+    type = db.Column(db.Enum(*[c.__name__ for c in DestinationMixin.__subclasses__()]))
+    object_id = db.Column(db.Integer)
+    form_id = db.Column(db.Integer, db.ForeignKey('form.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
