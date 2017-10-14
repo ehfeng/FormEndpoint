@@ -3,6 +3,7 @@ import os
 
 from celery import Celery
 from flask import Flask
+from flask_login import LoginManager
 from raven.contrib.flask import Sentry
 from raven.contrib.celery import register_signal, register_logger_signal
 
@@ -41,4 +42,8 @@ def make_celery(app):
 
 celery = make_celery(app)
 
+login_manager = LoginManager()
+login_manager.init_app(app)
+
 from formendpoint import views  # NOQA
+from formendpoint import cli  # NOQA

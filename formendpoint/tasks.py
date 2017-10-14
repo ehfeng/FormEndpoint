@@ -2,12 +2,9 @@ from app import celery
 
 
 @celery.task()
-def process_post_request(data, request_args):
+def process_post_request(post_id):
     """
-    `destination`
-    Args:
-        form_id(int): Form.id
-        request_args(dict):
+    Send data to orphan or endpoint destinations.
     """
     # TODO
     raise NotImplemented

@@ -63,16 +63,23 @@ class User(db.Model, UserMixin):
         self.validation_hash = uuid.uuid4().hex
         self.validation_hash_added = datetime.datetime.now()
 
+    def __repr__(self):
+        return '<%s>' % self.email
+
 
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    submitted = db.Column(db.DateTime, server_default=func.now(), nullable=False)
-    origin = db.Column(db.Text, nullable=False)
+    created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
+    # headers
+    referrer = db.Column(db.Text, nullable=False)
     ip_address = db.Column(db.Text)
     user_agent = db.Column(db.Text)
-    data = db.Column(db.JSON, nullable=False)
+    # body data
+    data = db.Column(JSONB, nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     form_id = db.Column(db.Integer, db.ForeignKey('form.id'), nullable=True)
+    # ad-hoc destinations
+    destinations = db.Column(ARRAY(db.Text))
 
 
 class Form(db.Model):
@@ -80,15 +87,15 @@ class Form(db.Model):
     created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
     name = db.Column(db.Text)
     redirect = db.Column(db.Text)
-    _origin = db.Column(db.String)  # ORIGIN POSIX regex
+    _referrer = db.Column(db.String)  # ORIGIN POSIX regex
 
     @property
-    def origin(self):
-        return re.sub('_', '?', re.sub('%', '*', self._origin))
+    def referrer(self):
+        return re.sub('_', '?', re.sub('%', '*', self._referrer))
 
-    @origin.setter
-    def origin(self, value):
-        self._origin = re.sub('\?', '_', re.sub('\*', '%', self.value))
+    @referrer.setter
+    def referrer(self, value):
+        self._referrer = re.sub('\?', '_', re.sub('\*', '%', self.value))
 
     @classmethod
     def create_for_destination(cls):
@@ -99,7 +106,7 @@ class Form(db.Model):
 
     @classmethod
     def reverse_ilike(cls, destination):
-        BinaryExpression(literal(destination), cls._origin, custom_op('ilike'))
+        BinaryExpression(literal(destination), cls._referrer, custom_op('ilike'))
 
     @classmethod
     def get_or_create_from_destination(cls, destination, user):
@@ -109,7 +116,7 @@ class Form(db.Model):
         raise NotImplemented
 
     @classmethod
-    def get_by_origin(cls, origin, user):
+    def get_by_referrer(cls, referrer, user):
         # TODO
         return None
         raise NotImplemented
