@@ -1,6 +1,5 @@
 from app import celery
 from formendpoint.models import (
-    Endpoint,
     Post,
 )
 
@@ -11,14 +10,7 @@ def process_post_request(post_id):
     Send data to orphan or endpoint destinations.
     """
     post = Post.query.get(post_id)
-    if post.endpoint:
-        for destination in post.endpoint.destinations:
-            destination.process(post)
-    else:
-        endpoints = Endpoint.get_for_referrer(post.referrer, post.organization)
-        for endpoint in endpoints:
-            for destination in endpoint.destinations:
-                destination.process(post)
+    post.endpoint
 
 # @celery.task()
 # def insert_form(user_id, spreadsheet_id, form_data):

@@ -1,7 +1,6 @@
 import datetime
 
 from flask import (
-    abort,
     redirect,
     render_template,
     request,
@@ -16,18 +15,19 @@ from flask_login import (
 from furl import furl
 
 from app import app, login_manager
+from formendpoint.forms import EndpointForm
 from formendpoint.helpers import get_flow
 from formendpoint.models import (
     db,
     User,
     Organization,
+    OrganizationMember,
     Post,
     Endpoint,
-    # EndpointValidator, Destination, Webhook, Email, GoogleSheet,
 )
 from formendpoint.tasks import process_post_request
 
-DEMO_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/'  # NOQA
+DEMO_URL = 'https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/'
 
 
 @login_manager.user_loader
@@ -37,10 +37,10 @@ def load_user(user_id):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    url = furl(url_for('profile', org_slug='demo', _external=True))
-    url.args['destination'] = DEMO_SHEET_URL
+    url = furl(url_for('profile', org_name='demo', _external=True))
+    url.args['destination'] = DEMO_URL
     form = render_template('form.html', url=url.url, input='<input type="email" name="email">')
-    return render_template('index.html', form=form, demo_url=DEMO_SHEET_URL)
+    return render_template('index.html', form=form, demo_url=DEMO_URL)
 
 
 @app.route('/login/<validation_hash>')
@@ -49,7 +49,7 @@ def login(validation_hash):
     if user and user.validation_hash_added and user.validation_hash_added > \
             datetime.datetime.now() - datetime.timedelta(hours=4):
         login_user(user)
-    return redirect(url_for('profile', slug=user.slug))
+    return redirect(url_for('profile', org_name=user.name))
 
 
 @login_required
@@ -58,7 +58,7 @@ def auth_start():
     if (current_user.is_authenticated and current_user.credentials and
             (current_user.credentials.refresh_token or request.args.get('force') != 'True')):
         return redirect(request.args.get('next') or
-                        url_for('profile', slug=current_user.slug))
+                        url_for('profile', org_name=current_user.name))
     return redirect(get_flow().step1_get_authorize_url())
 
 
@@ -69,7 +69,7 @@ def auth_finish():
     current_user.credentials_json = credentials.to_json()
     db.session.add(current_user)
     db.session.commit()
-    return redirect(url_for('profile', slug=current_user.slug))
+    return redirect(url_for('profile', org_name=current_user.name))
 
 
 @login_required
@@ -79,15 +79,14 @@ def logout():
     return redirect(url_for('index'))
 
 
-@app.route('/<org_slug>/<endpoint_slug>', methods=['GET', 'POST'])
-def endpoint(org_slug, endpoint_slug):
-    org = Organization.query.filter_by(slug=org_slug).first()
-    if not org:
-        abort(404)
-
-    endpoint = Endpoint.query.filter_by(organization=org, slug=endpoint_slug).first()
-    if not endpoint:
-        abort(404)
+@app.route('/<orgname>/<endpointname>', methods=['GET', 'POST'])
+def endpoint(orgname, endpointname):
+    if endpointname == 'e':
+        endpoint = Endpoint.query.filter_by(uuid=endpointname).first_or_404()
+        org = endpoint.organization
+    else:
+        org = Organization.query.filter_by(name=orgname).first_or_404()
+        endpoint = Endpoint.query.filter_by(organization=org, name=endpointname).first_or_404()
 
     if request.method == 'POST':
         ip_address = request.remote_addr if request.remote_addr != '127.0.0.1' \
@@ -103,19 +102,41 @@ def endpoint(org_slug, endpoint_slug):
         )
         db.session.add(post)
         db.session.commit()
+
+        process_post_request.delay(post.id)
         return redirect(url_for('index'))
     return 'Endpoint return'
 
 
-@app.route('/<org_slug>', methods=['GET', 'POST'])
-def profile(org_slug):
+@login_required
+@app.route('/<org_name>/endpoint/new', methods=['GET', 'POST'])
+def create_endpoint(org_name):
+    form = EndpointForm(request.form)
+    if request.method == 'POST' and form.validate():
+        org = Organization.query.filter(
+            (Organization.name == org_name) &
+            Organization.id.in_(
+                db.session.query(OrganizationMember.organization_id).filter_by(
+                    user_id=current_user.id
+                )
+            )
+        ).first_or_404()
+        e = Endpoint(secret=form.data.secret, name=form.data.name, organization_id=org.id)
+        db.session.add(e)
+        db.session.commit()
+
+        return redirect(url_for('profile', org_name=org.name))
+
+    return render_template('create_endpoint.html', form=form)
+
+
+@app.route('/<org_name>', methods=['GET', 'POST'])
+def profile(org_name):
     """
     Args:
-        destination: google sheet, webhook, form slug
+        destination: google sheet, webhook, form name
     """
-    org = Organization.query.filter_by(slug=org_slug).first()
-    if not org:
-        abort(404)
+    org = Organization.query.filter_by(name=org_name).first_or_404()
 
     if request.method == 'POST':
         ip_address = request.remote_addr if request.remote_addr != '127.0.0.1' \
@@ -138,15 +159,15 @@ def profile(org_slug):
         elif 'next' in request.args:
             return redirect(request.args.get('next'))
         else:
-            return redirect(url_for('success', org_slug=org.slug, _external=True))
+            return redirect(url_for('success', orgname=org.name, _external=True))
 
-    form = render_template('form.html', url=url_for('profile', org_slug=org.slug,
+    form = render_template('form.html', url=url_for('profile', org_name=org.name,
                            _external=True))
     return render_template('profile.html', form=form)
 
 
-@app.route('/<org_slug>/success')
-def success(org_slug):
+@app.route('/<orgname>/success')
+def success(orgname):
     if current_user.is_authenticated:
         return "Setup your form to redirect anywhere with the next parameter."
     return "Success!"

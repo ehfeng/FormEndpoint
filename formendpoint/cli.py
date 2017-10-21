@@ -7,13 +7,14 @@ from formendpoint.models import db, Organization, OrganizationMember, User
 
 @app.cli.command()
 @click.option('--email', prompt="Email")
-@click.option('--username', prompt="username")
-def createuser(email, username):
-    user = User(email=email)
-    org = Organization(slug=username, personal=True)
-    om = OrganizationMember(organization=org, user=user)
-    db.session.add(user)
+@click.option('--orgname', prompt="orgname")
+def createuser(email, orgname):
+    org = Organization(name=orgname, personal=True)
     db.session.add(org)
+    db.session.commit()
+    user = User(email=email, personal_organization_id=org.id)
+    om = OrganizationMember(organization=org, user=user, owner=True)
+    db.session.add(user)
     db.session.add(om)
     db.session.commit()
 
