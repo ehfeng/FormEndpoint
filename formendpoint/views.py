@@ -48,7 +48,7 @@ def login(validation_hash):
     if user and user.validation_hash_added and user.validation_hash_added > \
             datetime.datetime.now() - datetime.timedelta(hours=4):
         login_user(user)
-    return redirect(url_for('organization', org_name=user.name))
+    return redirect(url_for('index'))
 
 
 @login_required
