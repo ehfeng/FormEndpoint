@@ -231,6 +231,8 @@ class PersonalDestinationMixin(object):
 class Gmail(db.Model, DestinationMixin, PersonalDestinationMixin):
     email = db.Column(db.Text)
 
+    user = db.relationship('User', lazy='select', uselist=False, backref=db.backref('gmail'))
+
     def process(self, post):
         raise NotImplemented
 

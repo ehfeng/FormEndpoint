@@ -19,6 +19,7 @@ from formendpoint.forms import EndpointForm, EndpointDestinationForm
 from formendpoint.helpers import get_flow, handle_post
 from formendpoint.models import (
     db,
+    GoogleSheet,
     User,
     Organization,
     OrganizationMember,
@@ -33,7 +34,7 @@ def load_user(user_id):
     return User.query.get(user_id)
 
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/')
 def index():
     url = furl(url_for('organization', org_name='demo', _external=True))
     url.args['destination'] = DEMO_URL
@@ -53,11 +54,13 @@ def login(validation_hash):
 @login_required
 @app.route('/destinations/googlesheet/auth-start')
 def auth_start():
-    if (current_user.is_authenticated and current_user.google_sheet.credentials and
-            (current_user.google_sheet.credentials.refresh_token or
-                request.args.get('force') != 'True')):
+    if (current_user.is_authenticated and current_user.google_sheet and
+        current_user.google_sheet.credentials and
+        (current_user.google_sheet.credentials.refresh_token or
+            request.args.get('force'))):
         return redirect(request.args.get('next') or
                         url_for('organization', org_name=current_user.name))
+
     return redirect(get_flow().step1_get_authorize_url())
 
 
@@ -65,8 +68,17 @@ def auth_start():
 @app.route('/destinations/googlesheet/auth-finish')
 def auth_finish():
     credentials = get_flow().step2_exchange(request.args.get('code'))
-    current_user.google_sheet.credentials_json = credentials.to_json()
-    db.session.add(current_user.google_sheet)
+
+    if current_user.google_sheet:
+        current_user.google_sheet.credentials_json = credentials.to_json()
+        db.session.add(current_user.google_sheet)
+    else:
+        gs = GoogleSheet(
+            user_id=current_user.id,
+            credentials_json=credentials.to_json()
+        )
+        db.session.add(gs)
+
     db.session.commit()
     return redirect(url_for('index'))
 
