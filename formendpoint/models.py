@@ -9,7 +9,6 @@ from apiclient import discovery
 from flask_login import UserMixin
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
-from flask_sqlalchemy.model import camel_to_snake_case
 from oauth2client.client import OAuth2Credentials
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declared_attr
@@ -60,6 +59,8 @@ class Organization(db.Model):
     name = db.Column(db.String, unique=True)
     personal = db.Column(db.Boolean, default=True)
 
+    user = db.relationship('User', lazy='select', uselist=False,
+                           backref=db.backref('personal_organization'))
     endpoints = db.relationship('Endpoint', lazy='select', backref=db.backref('organization'))
     members = db.relationship('OrganizationMember', lazy='select',
                               backref=db.backref('organization'))
@@ -68,7 +69,8 @@ class Organization(db.Model):
 
     @validates('name')
     def validate_name(self, key, email):
-        assert len(email) > 1
+        """Name must be at least 3 characters long"""
+        assert len(email) > 2
         return email
 
 
@@ -90,14 +92,23 @@ class User(db.Model, UserMixin):
         self.validation_hash = uuid.uuid4().hex
         self.validation_hash_added = datetime.datetime.now()
 
-    @property
-    def personal_organization(self):
-        return Organization.query.get(self.personal_organization_id)
+    def is_owner(self, organization):
+        return db.session.query(OrganizationMember.query.filter_by(
+            user_id=self.id,
+            owner=True,
+            organization_id=organization.id
+        ).exists()).scalar()
+
+    def is_member(self, organization):
+        return db.session.query(OrganizationMember.query.filter_by(
+                user_id=self.id,
+                organization_id=organization.id
+            ).exists()).scalar()
 
 
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    uuid = db.Column(db.Text, unique=True)
+    uuid = db.Column(db.Text, unique=True, default=uuid.uuid4().hex)
     created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
     # headers
     referrer = db.Column(db.Text, nullable=False)
@@ -175,10 +186,6 @@ class DestinationMixin(object):
     Destinations exist only to hold account-level state
     Per-endpoint data
     """
-    @declared_attr
-    def __tablename__(cls):
-        return camel_to_snake_case(cls.__name__)
-
     id = db.Column(db.Integer, primary_key=True)
 
     @classmethod
@@ -199,7 +206,7 @@ class DestinationMixin(object):
         raise NotImplemented
 
 
-class PersonalDestinationMixin(DestinationMixin):
+class PersonalDestinationMixin(object):
     credentials_json = db.Column(JSONB)
 
     @declared_attr
@@ -221,14 +228,16 @@ class PersonalDestinationMixin(DestinationMixin):
             self.credentials_json = cred
 
 
-class Gmail(db.Model, PersonalDestinationMixin):
+class Gmail(db.Model, DestinationMixin, PersonalDestinationMixin):
     email = db.Column(db.Text)
 
     def process(self, post):
         raise NotImplemented
 
 
-class GoogleSheet(db.Model, PersonalDestinationMixin):
+class GoogleSheet(db.Model, DestinationMixin, PersonalDestinationMixin):
+    user = db.relationship('User', lazy='select', uselist=False, backref=db.backref('google_sheet'))
+
     @property
     def sheets(self):
         http = self.credentials.authorize(httplib2.Http())

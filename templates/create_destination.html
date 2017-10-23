@@ -1,0 +1,8 @@
+{% from "_formhelpers.html" import render_field %}
+<form method="GET">
+  <dl>
+  	{{ form.csrf_token }}
+    {{ render_field(form.destination) }}
+  </dl>
+  <p><input type=submit value="Create Endpoint Destination">
+</form>

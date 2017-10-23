@@ -10,7 +10,8 @@ def process_post_request(post_id):
     Send data to orphan or endpoint destinations.
     """
     post = Post.query.get(post_id)
-    post.endpoint
+    print(post)
+
 
 # @celery.task()
 # def insert_form(user_id, spreadsheet_id, form_data):

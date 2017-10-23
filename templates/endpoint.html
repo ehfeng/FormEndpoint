@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+</head>
+<body>
+<div>Secret URL: {{ url_for('secret_endpoint', uuid=endpoint.uuid, _external=True) }}</div>
+<br>
+<form method="POST" action="{{ url_for('secret_endpoint', uuid=endpoint.uuid) }}?redirect={{ url_for('endpoint', org_name=endpoint.organization.name, endpoint_name=endpoint.name, _external=True) }}">
+	<input type="text" name="field" autofocus="">
+	<input type="submit" value="Submit Test Data">
+</form>
+<br>
+{% for post in endpoint.posts %}
+<div><code>{{ post.uuid }}</code></div>
+<pre>{{ post.data }}</pre>
+{% endfor %}
+</body>
+</html>
