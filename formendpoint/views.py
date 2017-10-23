@@ -52,8 +52,19 @@ def login(validation_hash):
 
 
 @login_required
+@app.route('/logout')
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
+
+####################
+# Destination Auth #
+####################
+
+
+@login_required
 @app.route('/destinations/googlesheet/auth-start')
-def auth_start():
+def google_sheets_auth_start():
     if (current_user.is_authenticated and current_user.google_sheet and
         current_user.google_sheet.credentials and
         (current_user.google_sheet.credentials.refresh_token or
@@ -66,7 +77,7 @@ def auth_start():
 
 @login_required
 @app.route('/destinations/googlesheet/auth-finish')
-def auth_finish():
+def google_sheets_auth_finish():
     credentials = get_flow().step2_exchange(request.args.get('code'))
 
     if current_user.google_sheet:
@@ -82,12 +93,9 @@ def auth_finish():
     db.session.commit()
     return redirect(url_for('index'))
 
-
-@login_required
-@app.route('/logout')
-def logout():
-    logout_user()
-    return redirect(url_for('index'))
+#########################
+# Endpoint Destinations #
+#########################
 
 
 @app.route('/<org_name>/<endpoint_name>/destination/googlesheet/new')
@@ -100,6 +108,10 @@ def create_google_sheet_destination(org_name, endpoint_name):
 def create_destination(org_name, endpoint_name):
     form = EndpointDestinationForm(request.form)
     return render_template('create_destination.html', form=form)
+
+#############
+# Endpoints #
+#############
 
 
 @app.route('/<org_name>/<endpoint_name>', methods=['GET', 'POST'])

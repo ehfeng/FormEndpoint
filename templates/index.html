@@ -7,7 +7,10 @@
 	<h1>FormEndpoint</h1>
 	<div>
 	{% if current_user.is_authenticated %}
-		<a href="{{ url_for('organization', org_name=current_user.personal_organization.name) }}">{{ current_user.personal_organization.name }}</a>
+		<div><a href="{{ url_for('organization', org_name=current_user.personal_organization.name) }}">{{ current_user.personal_organization.name }}</a></div>
+		{% if not current_user.google_sheet %}
+			<div><a href="{{ url_for('google_sheets_auth_start') }}">Link Google Sheets</a></div>
+		{% endif %}
 	{% else %}
 		<br>
 		<div>POST forms to Google Sheets with no backend code.</div>
