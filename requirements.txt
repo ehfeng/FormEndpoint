@@ -17,6 +17,7 @@ google-api-python-client==1.6.4
 gunicorn==19.7.1
 httplib2==0.10.3
 idna==2.6
+inflection==0.3.1
 itsdangerous==0.24
 Jinja2==2.9.6
 kombu==4.1.0

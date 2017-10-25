@@ -11,4 +11,4 @@ class EndpointForm(FlaskForm):
 
 class EndpointDestinationForm(FlaskForm):
     destination = SelectField(
-        hoices=[(c.__name__, c.__name__) for c in DestinationMixin.__subclasses__()])
+        choices=[(c.__name__, c.__name__) for c in DestinationMixin.__subclasses__()])

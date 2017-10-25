@@ -1,6 +1,7 @@
 import datetime
 
 from flask import (
+    abort,
     redirect,
     render_template,
     request,
@@ -19,6 +20,7 @@ from formendpoint.forms import EndpointForm, EndpointDestinationForm
 from formendpoint.helpers import get_flow, handle_post
 from formendpoint.models import (
     db,
+    DestinationMixin,
     GoogleSheet,
     User,
     Organization,
@@ -65,14 +67,11 @@ def logout():
 @login_required
 @app.route('/destinations/googlesheet/auth-start')
 def google_sheets_auth_start():
-    if (current_user.is_authenticated and current_user.google_sheet and
-        current_user.google_sheet.credentials and
-        (current_user.google_sheet.credentials.refresh_token or
-            request.args.get('force'))):
-        return redirect(request.args.get('next') or
-                        url_for('organization', org_name=current_user.name))
+    if request.args.get('force') or not current_user.has_destination(GoogleSheet):
+        return redirect(get_flow().step1_get_authorize_url())
 
-    return redirect(get_flow().step1_get_authorize_url())
+    return redirect(request.args.get('next') or
+                    url_for('organization', org_name=current_user.name))
 
 
 @login_required
@@ -98,14 +97,30 @@ def google_sheets_auth_finish():
 #########################
 
 
-@app.route('/<org_name>/<endpoint_name>/destination/googlesheet/new')
-def create_google_sheet_destination(org_name, endpoint_name):
-    # TODO
-    return
+@login_required
+@app.route('/<org_name>/<endpoint_name>/destination/<destination_name>/new')
+def create_google_sheet_destination(org_name, endpoint_name, destination_name):
+    try:
+        cls = DestinationMixin.dash_to_class(destination_name)
+    except KeyError:
+        abort(404)
+
+    if not current_user.has_destination(cls):
+        return redirect('google_sheets_auth_start')
+
+    current_user.google_sheet
+    return render_template('create_google_sheet_destination.html')
 
 
+@login_required
 @app.route('/<org_name>/<endpoint_name>/destination/new', methods=['GET', 'POST'])
 def create_destination(org_name, endpoint_name):
+    org = Organization.objects.filter_by(name=org_name)
+    if not current_user.is_member(org):
+        abort(404)
+
+    {c.__name__: c for c in DestinationMixin.__subclasses__()}
+
     form = EndpointDestinationForm(request.form)
     return render_template('create_destination.html', form=form)
 

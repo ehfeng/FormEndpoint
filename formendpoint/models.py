@@ -1,5 +1,6 @@
 import datetime
 import httplib2
+import inflection
 import re
 import string
 import uuid
@@ -32,6 +33,11 @@ def sane_repr(*attrs):
         return u'<%s at 0x%x: %s>' % (cls, id(self), ', '.join(pairs))
 
     return _repr
+
+
+class classproperty(property):
+    def __get__(self, obj, objtype=None):
+        return super(classproperty, self).__get__(objtype)
 
 
 db = SQLAlchemy(app)
@@ -104,6 +110,13 @@ class User(db.Model, UserMixin):
                 user_id=self.id,
                 organization_id=organization.id
             ).exists()).scalar()
+
+    def has_destination(self, cls):
+        assert issubclass(cls, PersonalDestinationMixin)
+
+        pd = cls.query.filter_by(user_id=self.id).first()
+        return (self.is_authenticated and pd and pd.credentials
+                and pd.credentials.refresh_token)
 
 
 class Post(db.Model):
@@ -189,6 +202,15 @@ class DestinationMixin(object):
     id = db.Column(db.Integer, primary_key=True)
 
     @classmethod
+    def dash_to_class(cls, dashname):
+        subclass = {c.__name__: c for c in DestinationMixin.__subclasses__()}
+        return subclass[inflection.camelize(dashname.replace('-', '_'))]
+
+    @classproperty
+    def dashname(cls):
+        return inflection.dasherize(inflection.underscore(cls.__name__))
+
+    @classmethod
     def is_valid(cls, value):
         """
         Whether the value is valid for this `Destination` type.
@@ -238,7 +260,8 @@ class Gmail(db.Model, DestinationMixin, PersonalDestinationMixin):
 
 
 class GoogleSheet(db.Model, DestinationMixin, PersonalDestinationMixin):
-    user = db.relationship('User', lazy='select', uselist=False, backref=db.backref('google_sheet'))
+    user = db.relationship('User', lazy='select',
+                           backref=db.backref('google_sheet', uselist=False))
 
     @property
     def sheets(self):
