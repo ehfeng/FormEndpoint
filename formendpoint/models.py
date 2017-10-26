@@ -1,6 +1,7 @@
 import datetime
 import httplib2
 import inflection
+import os
 import re
 import string
 import uuid
@@ -10,7 +11,7 @@ from apiclient import discovery
 from flask_login import UserMixin
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
-from oauth2client.client import OAuth2Credentials
+from oauth2client.client import OAuth2Credentials, OAuth2WebServerFlow
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import validates
@@ -210,6 +211,10 @@ class DestinationMixin(object):
     def dashname(cls):
         return inflection.dasherize(inflection.underscore(cls.__name__))
 
+    @classproperty
+    def human_name(cls):
+        return cls.__name__
+
     @classmethod
     def is_valid(cls, value):
         """
@@ -250,18 +255,39 @@ class PersonalDestinationMixin(object):
             self.credentials_json = cred
 
 
-class Gmail(db.Model, DestinationMixin, PersonalDestinationMixin):
+class GooglePersonalDestination(PersonalDestinationMixin):
+    scope = None
+
+    @classmethod
+    def get_flow(cls, redirect_uri):
+        flow = OAuth2WebServerFlow(
+            client_id=os.environ['GOOGLE_CLIENT_ID'],
+            client_secret=os.environ['GOOGLE_CLIENT_SECRET'],
+            scope=cls.scope,
+            redirect_uri=redirect_uri,
+            )
+        flow.params['access_type'] = 'offline'
+        flow.params['prompt'] = 'consent'
+        return flow
+
+
+class Gmail(db.Model, DestinationMixin, GooglePersonalDestination):
+    scope = 'https://www.googleapis.com/auth/gmail.send'
+
     email = db.Column(db.Text)
 
     user = db.relationship('User', lazy='select', uselist=False, backref=db.backref('gmail'))
 
-    def process(self, post):
-        raise NotImplemented
 
+class GoogleSheet(db.Model, DestinationMixin, GooglePersonalDestination):
+    scope = 'https://www.googleapis.com/auth/spreadsheets'
 
-class GoogleSheet(db.Model, DestinationMixin, PersonalDestinationMixin):
     user = db.relationship('User', lazy='select',
                            backref=db.backref('google_sheet', uselist=False))
+
+    @classproperty
+    def human_name(cls):
+        return 'Google Sheet'
 
     @property
     def sheets(self):

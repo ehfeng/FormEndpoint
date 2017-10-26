@@ -1,23 +1,10 @@
 import os
 
 from flask import g, render_template, send_from_directory, redirect, url_for
-from oauth2client.client import OAuth2WebServerFlow
 
 from app import app, sentry
 from formendpoint.models import db, Post
 from formendpoint.tasks import process_post_request
-
-
-def get_flow():
-    flow = OAuth2WebServerFlow(
-        client_id=os.environ['GOOGLE_CLIENT_ID'],
-        client_secret=os.environ['GOOGLE_CLIENT_SECRET'],
-        scope='https://www.googleapis.com/auth/spreadsheets',
-        redirect_uri=url_for('auth_finish', _external=True),
-        )
-    flow.params['access_type'] = 'offline'
-    flow.params['prompt'] = 'consent'
-    return flow
 
 
 @app.errorhandler(500)

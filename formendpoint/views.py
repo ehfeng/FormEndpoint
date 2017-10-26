@@ -16,15 +16,17 @@ from flask_login import (
 from furl import furl
 
 from app import app, login_manager
-from formendpoint.forms import EndpointForm, EndpointDestinationForm
-from formendpoint.helpers import get_flow, handle_post
+from formendpoint.forms import EndpointForm
+from formendpoint.helpers import handle_post
 from formendpoint.models import (
     db,
     DestinationMixin,
+    GooglePersonalDestination,
     GoogleSheet,
     User,
     Organization,
     OrganizationMember,
+    PersonalDestinationMixin,
     Endpoint,
 )
 
@@ -65,19 +67,21 @@ def logout():
 
 
 @login_required
-@app.route('/destinations/googlesheet/auth-start')
-def google_sheets_auth_start():
+@app.route('/destination/<destination_name>/auth-start')
+def google_auth_start(destination_name):
+    cls = [c for c in GooglePersonalDestination.__subclasses__ if c.dashname == destination_name][0]
     if request.args.get('force') or not current_user.has_destination(GoogleSheet):
-        return redirect(get_flow().step1_get_authorize_url())
+        return redirect(cls.get_flow().step1_get_authorize_url())
 
     return redirect(request.args.get('next') or
                     url_for('organization', org_name=current_user.name))
 
 
 @login_required
-@app.route('/destinations/googlesheet/auth-finish')
-def google_sheets_auth_finish():
-    credentials = get_flow().step2_exchange(request.args.get('code'))
+@app.route('/destination/<destination_name>/auth-finish')
+def google_auth_finish(destination_name):
+    cls = [c for c in GooglePersonalDestination.__subclasses__ if c.dashname == destination_name][0]
+    credentials = cls.get_flow().step2_exchange(request.args.get('code'))
 
     if current_user.google_sheet:
         current_user.google_sheet.credentials_json = credentials.to_json()
@@ -99,30 +103,30 @@ def google_sheets_auth_finish():
 
 @login_required
 @app.route('/<org_name>/<endpoint_name>/destination/<destination_name>/new')
-def create_google_sheet_destination(org_name, endpoint_name, destination_name):
+def create_endpoint_destination(org_name, endpoint_name, destination_name):
     try:
         cls = DestinationMixin.dash_to_class(destination_name)
     except KeyError:
         abort(404)
 
-    if not current_user.has_destination(cls):
+    if issubclass(cls, PersonalDestinationMixin) and not current_user.has_destination(cls):
         return redirect('google_sheets_auth_start')
 
-    current_user.google_sheet
+    # TODO: add for non-personal destinations
     return render_template('create_google_sheet_destination.html')
 
 
 @login_required
 @app.route('/<org_name>/<endpoint_name>/destination/new', methods=['GET', 'POST'])
-def create_destination(org_name, endpoint_name):
-    org = Organization.objects.filter_by(name=org_name)
+def create_endpoint_destination_index(org_name, endpoint_name):
+    org = Organization.query.filter_by(name=org_name).first_or_404()
     if not current_user.is_member(org):
         abort(404)
 
-    {c.__name__: c for c in DestinationMixin.__subclasses__()}
+    destination_names = {c.dashname: c.human_name for c in DestinationMixin.__subclasses__()}
 
-    form = EndpointDestinationForm(request.form)
-    return render_template('create_destination.html', form=form)
+    return render_template('create_destination.html', org_name=org_name,
+                           endpoint_name=endpoint_name, destinations=destination_names)
 
 #############
 # Endpoints #

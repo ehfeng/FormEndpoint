@@ -1,8 +1,11 @@
-{% from "_formhelpers.html" import render_field %}
-<form method="GET">
-  <dl>
-  	{{ form.csrf_token }}
-    {{ render_field(form.destination) }}
-  </dl>
-  <p><input type=submit value="Create Endpoint Destination">
-</form>
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+</head>
+<body>
+	{% for destination in destinations %}
+	<div><a href="{{ url_for('create_endpoint_destination', org_name=org_name, endpoint_name=endpoint_name, destination_name=destination) }}">{{ destinations[destination] }}</a></div>
+	{% endfor %}
+</body>
+</html>
