@@ -1,0 +1,12 @@
+{% from "_formhelpers.html" import render_field %}
+<form method="POST">
+  <dl>
+  	{{ form.csrf_token }}
+  	{% for field in form._fields %}
+  	    {% if form.csrf_token != form._fields[field] %}
+  			{{ render_field(form._fields[field]) }}
+  	    {% endif %}
+  	{% endfor %}
+  </dl>
+  <button>Create Endpoint</button>
+</form>

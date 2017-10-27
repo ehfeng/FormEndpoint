@@ -6,6 +6,15 @@
 <body>
 <div>Secret URL: {{ url_for('secret_endpoint', uuid=endpoint.uuid, _external=True) }}</div>
 <br>
+<h3>Add a destination</h3>
+<form method="GET" action="">
+	<select name="destination">
+		<option value="google-sheet">Google Sheets</option>
+	</select>
+	<button>Submit</button>
+</form>
+
+<br>
 <form method="POST" action="{{ url_for('secret_endpoint', uuid=endpoint.uuid) }}?redirect={{ url_for('endpoint', org_name=endpoint.organization.name, endpoint_name=endpoint.name, _external=True) }}">
 	<input type="text" name="field" autofocus="">
 	<input type="submit" value="Submit Test Data">

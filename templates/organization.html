@@ -8,6 +8,10 @@
 	<h1>{{ org.name }} Profile</h1>
 	<br>
 	<div>
+		<a href="{{ url_for('create_endpoint', org_name=org.name) }}">Create Endpoint</a>
+	</div>
+	<br>
+	<div>
 		{% for endpoint in org.endpoints %}
 		<div>
 			<a href="{{ url_for('endpoint', org_name=org.name, endpoint_name=endpoint.name) }}">{{ endpoint.name }}</a>

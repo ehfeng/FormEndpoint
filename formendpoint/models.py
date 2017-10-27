@@ -18,6 +18,8 @@ from sqlalchemy.orm import validates
 from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import literal
 
+from formendpoint.forms import GoogleSheetForm
+
 from app import app
 
 GOOGLE_SHEETS_DISCOVERY_URL = 'https://sheets.googleapis.com/$discovery/rest?version=v4'
@@ -36,7 +38,7 @@ def sane_repr(*attrs):
     return _repr
 
 
-class classproperty(property):
+class classproperty(property):  # NOQA
     def __get__(self, obj, objtype=None):
         return super(classproperty, self).__get__(objtype)
 
@@ -107,17 +109,17 @@ class User(db.Model, UserMixin):
         ).exists()).scalar()
 
     def is_member(self, organization):
-        return db.session.query(OrganizationMember.query.filter_by(
-                user_id=self.id,
-                organization_id=organization.id
-            ).exists()).scalar()
+        exists_query = OrganizationMember.query.filter_by(
+            user_id=self.id,
+            organization_id=organization.id
+        ).exists()
+        return db.session.query(exists_query).scalar()
 
     def has_destination(self, cls):
         assert issubclass(cls, PersonalDestinationMixin)
 
         pd = cls.query.filter_by(user_id=self.id).first()
-        return (self.is_authenticated and pd and pd.credentials
-                and pd.credentials.refresh_token)
+        return self.is_authenticated and pd and pd.credentials and pd.credentials.refresh_token
 
 
 class Post(db.Model):
@@ -229,6 +231,9 @@ class DestinationMixin(object):
         """
         raise NotImplemented
 
+    def form(self):
+        raise NotImplemented
+
     def process(self, post):
         raise NotImplemented
 
@@ -259,13 +264,13 @@ class GooglePersonalDestination(PersonalDestinationMixin):
     scope = None
 
     @classmethod
-    def get_flow(cls, redirect_uri):
+    def get_flow(cls, redirect_uri=None):
         flow = OAuth2WebServerFlow(
             client_id=os.environ['GOOGLE_CLIENT_ID'],
             client_secret=os.environ['GOOGLE_CLIENT_SECRET'],
             scope=cls.scope,
             redirect_uri=redirect_uri,
-            )
+        )
         flow.params['access_type'] = 'offline'
         flow.params['prompt'] = 'consent'
         return flow
@@ -292,12 +297,10 @@ class GoogleSheet(db.Model, DestinationMixin, GooglePersonalDestination):
     @property
     def sheets(self):
         http = self.credentials.authorize(httplib2.Http())
-        return discovery.build(
-                'sheets', 'v4',
-                http=http,
-                discoveryServiceUrl=GOOGLE_SHEETS_DISCOVERY_URL,
-                cache_discovery=False,
-            )
+        return discovery.build('sheets', 'v4',
+                               http=http,
+                               discoveryServiceUrl=GOOGLE_SHEETS_DISCOVERY_URL,
+                               cache_discovery=False)
 
     @property
     def credentials(self):
@@ -322,7 +325,7 @@ class GoogleSheet(db.Model, DestinationMixin, GooglePersonalDestination):
         title = ''
         alist = string.ascii_uppercase
         while num:
-            mod = (num-1) % 26
+            mod = (num - 1) % 26
             num = int((num - mod) / 26)
             title += alist[mod]
         return title[::-1]
@@ -334,6 +337,10 @@ class GoogleSheet(db.Model, DestinationMixin, GooglePersonalDestination):
 
     def process(self, post):
         raise NotImplemented
+
+    @property
+    def form(self):
+        return GoogleSheetForm()
 
 
 class Webhook(db.Model, DestinationMixin):

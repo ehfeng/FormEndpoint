@@ -16,18 +16,19 @@ from flask_login import (
 from furl import furl
 
 from app import app, login_manager
+
 from formendpoint.forms import EndpointForm
 from formendpoint.helpers import handle_post
 from formendpoint.models import (
-    db,
     DestinationMixin,
+    Endpoint,
     GooglePersonalDestination,
     GoogleSheet,
-    User,
     Organization,
     OrganizationMember,
     PersonalDestinationMixin,
-    Endpoint,
+    User,
+    db,
 )
 
 DEMO_URL = 'https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/'
@@ -69,19 +70,24 @@ def logout():
 @login_required
 @app.route('/destination/<destination_name>/auth-start')
 def google_auth_start(destination_name):
-    cls = [c for c in GooglePersonalDestination.__subclasses__ if c.dashname == destination_name][0]
+    cls = [c for c in GooglePersonalDestination.__subclasses__()
+           if c.dashname == destination_name][0]
     if request.args.get('force') or not current_user.has_destination(GoogleSheet):
-        return redirect(cls.get_flow().step1_get_authorize_url())
+        redirect_uri = url_for('google_auth_finish', destination_name=destination_name,
+                               _external=True)
+        return redirect(cls.get_flow(redirect_uri=redirect_uri).step1_get_authorize_url())
 
     return redirect(request.args.get('next') or
-                    url_for('organization', org_name=current_user.name))
+                    url_for('organization', org_name=current_user.personal_organization.name))
 
 
 @login_required
 @app.route('/destination/<destination_name>/auth-finish')
 def google_auth_finish(destination_name):
-    cls = [c for c in GooglePersonalDestination.__subclasses__ if c.dashname == destination_name][0]
-    credentials = cls.get_flow().step2_exchange(request.args.get('code'))
+    cls = [c for c in GooglePersonalDestination.__subclasses__()
+           if c.dashname == destination_name][0]
+    redirect_uri = url_for('google_auth_finish', destination_name=destination_name, _external=True)
+    credentials = cls.get_flow(redirect_uri=redirect_uri).step2_exchange(request.args.get('code'))
 
     if current_user.google_sheet:
         current_user.google_sheet.credentials_json = credentials.to_json()
@@ -109,24 +115,18 @@ def create_endpoint_destination(org_name, endpoint_name, destination_name):
     except KeyError:
         abort(404)
 
-    if issubclass(cls, PersonalDestinationMixin) and not current_user.has_destination(cls):
-        return redirect('google_sheets_auth_start')
+    if issubclass(cls, PersonalDestinationMixin):
+        if current_user.has_destination(cls):
+            return render_template('create_endpoint_destination.html',
+                                   form=current_user.google_sheet.form)
 
-    # TODO: add for non-personal destinations
-    return render_template('create_google_sheet_destination.html')
+        return redirect(url_for('google_auth_start', destination_name=destination_name))
 
+    else:
+        # TODO: add for non-personal destinations
+        raise NotImplemented
 
-@login_required
-@app.route('/<org_name>/<endpoint_name>/destination/new', methods=['GET', 'POST'])
-def create_endpoint_destination_index(org_name, endpoint_name):
-    org = Organization.query.filter_by(name=org_name).first_or_404()
-    if not current_user.is_member(org):
-        abort(404)
-
-    destination_names = {c.dashname: c.human_name for c in DestinationMixin.__subclasses__()}
-
-    return render_template('create_destination.html', org_name=org_name,
-                           endpoint_name=endpoint_name, destinations=destination_names)
+    return redirect(url_for('endpoint', org_name=org_name, endpoint_name=endpoint_name))
 
 #############
 # Endpoints #
@@ -138,10 +138,17 @@ def endpoint(org_name, endpoint_name):
     org = Organization.query.filter_by(name=org_name).first_or_404()
     endpoint = Endpoint.query.filter_by(organization=org, name=endpoint_name).first_or_404()
 
+    if request.args.get('destination') in [d.dashname for d in DestinationMixin.__subclasses__()]:
+        return redirect(url_for('create_endpoint_destination', org_name=org_name,
+                                endpoint_name=endpoint_name,
+                                destination_name=request.args.get('destination')))
+
     if request.method == 'POST':
         return handle_post(request, endpoint)
 
-    return render_template('endpoint.html', endpoint=endpoint)
+    return render_template('endpoint.html', endpoint=endpoint,
+                           destination_names={c.dashname: c.human_name
+                                              for c in DestinationMixin.__subclasses__()})
 
 
 @app.route('/e/<uuid>', methods=['POST'])
