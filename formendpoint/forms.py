@@ -8,4 +8,4 @@ class EndpointForm(FlaskForm):
 
 
 class GoogleSheetForm(FlaskForm):
-    spreadsheet = SelectField('Spreadsheet', choices=[])
+    spreadsheet = SelectField('Destination spreadsheet', choices=[('', 'Create new spreadsheet')])

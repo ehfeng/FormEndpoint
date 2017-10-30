@@ -9,7 +9,9 @@
 <h3>Add a destination</h3>
 <form method="GET" action="">
 	<select name="destination">
-		<option value="google-sheet">Google Sheets</option>
+		{% for destination_type in destination_types %}
+		<option value="{{ destination_type }}">{{ destination_types[destination_type] }}</option>
+		{% endfor %}
 	</select>
 	<button>Submit</button>
 </form>

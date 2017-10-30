@@ -1,9 +1,14 @@
 import os
 
-from flask import g, render_template, send_from_directory, redirect, url_for
+from flask import (
+    g,
+    redirect,
+    render_template,
+    send_from_directory, url_for
+)
 
 from app import app, sentry
-from formendpoint.models import db, Post
+from formendpoint.models import Post, db
 from formendpoint.tasks import process_post_request
 
 

@@ -23,6 +23,7 @@ from formendpoint.forms import GoogleSheetForm
 from app import app
 
 GOOGLE_SHEETS_DISCOVERY_URL = 'https://sheets.googleapis.com/$discovery/rest?version=v4'
+GOOGLE_DRIVE_DISCOVERY_URL = 'https://drive.googleapis.com/$discovery/rest?version=v2'
 GOOGLE_SHEET_URL_PATTERN = re.compile("^https\://docs\.google\.com/spreadsheets/d/(\S+)/.*")
 
 
@@ -77,10 +78,11 @@ class Organization(db.Model):
     __repr__ = sane_repr('name')
 
     @validates('name')
-    def validate_name(self, key, email):
+    def validate_name(self, key, name):
         """Name must be at least 3 characters long"""
-        assert len(email) > 2
-        return email
+        assert len(name) > 2
+        assert name != 'destinations'
+        return name
 
 
 class User(db.Model, UserMixin):
@@ -231,6 +233,9 @@ class DestinationMixin(object):
         """
         raise NotImplemented
 
+    def create_endpoint_destination(self, endpoint, **kwargs):
+        raise NotImplemented
+
     def form(self):
         raise NotImplemented
 
@@ -263,6 +268,10 @@ class PersonalDestinationMixin(object):
 class GooglePersonalDestination(PersonalDestinationMixin):
     scope = None
 
+    @property
+    def service(self):
+        raise NotImplemented
+
     @classmethod
     def get_flow(cls, redirect_uri=None):
         flow = OAuth2WebServerFlow(
@@ -280,8 +289,18 @@ class Gmail(db.Model, DestinationMixin, GooglePersonalDestination):
     scope = 'https://www.googleapis.com/auth/gmail.send'
 
     email = db.Column(db.Text)
+    data = db.Column(JSONB)
 
     user = db.relationship('User', lazy='select', uselist=False, backref=db.backref('gmail'))
+
+
+class GoogleDrive(db.Model, DestinationMixin, GooglePersonalDestination):
+    scope = 'https://www.googleapis.com/auth/drive.appfolder'
+
+    @property
+    def service(self):
+        http = self.credentials.authorize(httplib2.Http())
+        return discovery.build('drive', 'v3', http=http)
 
 
 class GoogleSheet(db.Model, DestinationMixin, GooglePersonalDestination):
@@ -295,7 +314,7 @@ class GoogleSheet(db.Model, DestinationMixin, GooglePersonalDestination):
         return 'Google Sheet'
 
     @property
-    def sheets(self):
+    def service(self):
         http = self.credentials.authorize(httplib2.Http())
         return discovery.build('sheets', 'v4',
                                http=http,
@@ -303,22 +322,8 @@ class GoogleSheet(db.Model, DestinationMixin, GooglePersonalDestination):
                                cache_discovery=False)
 
     @property
-    def credentials(self):
-        if self.credentials_json:
-            return OAuth2Credentials.from_json(self.credentials_json)
-        else:
-            return None
-
-    @credentials.setter
-    def credentials(self, cred):
-        if type(cred) is OAuth2Credentials:
-            self.credentials_json = cred.to_json()
-        else:
-            self.credentials_json = cred
-
-    @staticmethod
-    def find_furthest_empty_row(data, ranges):
-        return
+    def form(self):
+        return GoogleSheetForm()
 
     @staticmethod
     def convert_to_column_title(num):
@@ -335,12 +340,16 @@ class GoogleSheet(db.Model, DestinationMixin, GooglePersonalDestination):
         match = GOOGLE_SHEET_URL_PATTERN.search(value)
         return match and match.group(1)
 
+    def create_endpoint_destination(self, endpoint, google_file_id):
+        return EndpointDestination(template=self.create_template(google_file_id),
+                                   type=self.__class__.__name__,
+                                   destination_id=self.id, endpoint_id=endpoint.id)
+
     def process(self, post):
         raise NotImplemented
 
-    @property
-    def form(self):
-        return GoogleSheetForm()
+    def create_template(self, google_file_id):
+        return {"google_file_id": google_file_id, "columns": [], "cursor": 1}
 
 
 class Webhook(db.Model, DestinationMixin):
@@ -372,8 +381,9 @@ class Email(db.Model, DestinationMixin):
 class EndpointDestination(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
-    template = db.Column(db.Text)
-    type = db.Column(db.Enum(name='types',
-                             *[c.__name__ for c in DestinationMixin.__subclasses__()]))
+    template = db.Column(JSONB)  # jinja for emails, field to column mapping for Google Sheets
+    type = db.Column(db.Enum(name='destination_types',
+                             *[c.__name__ for c in DestinationMixin.__subclasses__()
+                               if c != PersonalDestinationMixin]))
     destination_id = db.Column(db.Integer)
     endpoint_id = db.Column(db.Integer, db.ForeignKey('endpoint.id'), nullable=False)

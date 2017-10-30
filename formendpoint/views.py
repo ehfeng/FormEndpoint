@@ -1,4 +1,5 @@
 import datetime
+import os
 
 from flask import (
     abort,
@@ -15,7 +16,7 @@ from flask_login import (
 )
 from furl import furl
 
-from app import app, login_manager
+from app import app, csrf, login_manager
 
 from formendpoint.forms import EndpointForm
 from formendpoint.helpers import handle_post
@@ -32,6 +33,9 @@ from formendpoint.models import (
 )
 
 DEMO_URL = 'https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/'
+GOOGLE_PICKER_API_KEY = os.environ['GOOGLE_PICKER_API_KEY']
+GOOGLE_CLIENT_ID = os.environ['GOOGLE_CLIENT_ID']
+GOOGLE_APP_ID = os.environ['GOOGLE_APP_ID']
 
 
 @login_manager.user_loader
@@ -68,12 +72,12 @@ def logout():
 
 
 @login_required
-@app.route('/destination/<destination_name>/auth-start')
-def google_auth_start(destination_name):
+@app.route('/destinations/<destination_type>/auth-start')
+def google_auth_start(destination_type):
     cls = [c for c in GooglePersonalDestination.__subclasses__()
-           if c.dashname == destination_name][0]
+           if c.dashname == destination_type][0]
     if request.args.get('force') or not current_user.has_destination(GoogleSheet):
-        redirect_uri = url_for('google_auth_finish', destination_name=destination_name,
+        redirect_uri = url_for('google_auth_finish', destination_type=destination_type,
                                _external=True)
         return redirect(cls.get_flow(redirect_uri=redirect_uri).step1_get_authorize_url())
 
@@ -82,11 +86,11 @@ def google_auth_start(destination_name):
 
 
 @login_required
-@app.route('/destination/<destination_name>/auth-finish')
-def google_auth_finish(destination_name):
+@app.route('/destinations/<destination_type>/auth-finish')
+def google_auth_finish(destination_type):
     cls = [c for c in GooglePersonalDestination.__subclasses__()
-           if c.dashname == destination_name][0]
-    redirect_uri = url_for('google_auth_finish', destination_name=destination_name, _external=True)
+           if c.dashname == destination_type][0]
+    redirect_uri = url_for('google_auth_finish', destination_type=destination_type, _external=True)
     credentials = cls.get_flow(redirect_uri=redirect_uri).step2_exchange(request.args.get('code'))
 
     if current_user.google_sheet:
@@ -108,19 +112,38 @@ def google_auth_finish(destination_name):
 
 
 @login_required
-@app.route('/<org_name>/<endpoint_name>/destination/<destination_name>/new')
-def create_endpoint_destination(org_name, endpoint_name, destination_name):
+@app.route('/<org_name>/<endpoint_name>/destinations/<destination_type>/new',
+           methods=['GET', 'POST'])
+def create_endpoint_destination(org_name, endpoint_name, destination_type):
+    org = Organization.query.filter_by(name=org_name).first_or_404()
+    endpoint = Endpoint.query.filter_by(organization=org, name=endpoint_name).first_or_404()
+
     try:
-        cls = DestinationMixin.dash_to_class(destination_name)
+        cls = DestinationMixin.dash_to_class(destination_type)
     except KeyError:
         abort(404)
 
-    if issubclass(cls, PersonalDestinationMixin):
-        if current_user.has_destination(cls):
-            return render_template('create_endpoint_destination.html',
-                                   form=current_user.google_sheet.form)
+    if request.method == 'POST':
+        kwargs = {'endpoint': endpoint}
+        if cls == GoogleSheet:
+            kwargs['google_file_id'] = request.form['google_file_id']
 
-        return redirect(url_for('google_auth_start', destination_name=destination_name))
+        dest = cls.query.filter_by(user_id=current_user.id).first_or_404()
+        ed = dest.create_endpoint_destination(**kwargs)
+        db.session.add(ed)
+        db.session.commit()
+        redirect(url_for('endpoint', org_name=org_name, endpoint_name=endpoint_name))
+
+    if issubclass(cls, PersonalDestinationMixin):
+        inst = cls.query.filter_by(user_id=current_user.id).first()
+        if inst:
+            return render_template('create_endpoint_destination.html',
+                                   google_picker_api_key=GOOGLE_PICKER_API_KEY,
+                                   google_client_id=GOOGLE_CLIENT_ID,
+                                   google_app_id=GOOGLE_APP_ID,
+                                   form=inst.form)
+
+        return redirect(url_for('google_auth_start', destination_type=destination_type))
 
     else:
         # TODO: add for non-personal destinations
@@ -133,6 +156,7 @@ def create_endpoint_destination(org_name, endpoint_name, destination_name):
 #############
 
 
+@csrf.exempt
 @app.route('/<org_name>/<endpoint_name>', methods=['GET', 'POST'])
 def endpoint(org_name, endpoint_name):
     org = Organization.query.filter_by(name=org_name).first_or_404()
@@ -141,16 +165,17 @@ def endpoint(org_name, endpoint_name):
     if request.args.get('destination') in [d.dashname for d in DestinationMixin.__subclasses__()]:
         return redirect(url_for('create_endpoint_destination', org_name=org_name,
                                 endpoint_name=endpoint_name,
-                                destination_name=request.args.get('destination')))
+                                destination_type=request.args.get('destination')))
 
     if request.method == 'POST':
         return handle_post(request, endpoint)
 
     return render_template('endpoint.html', endpoint=endpoint,
-                           destination_names={c.dashname: c.human_name
+                           destination_types={c.dashname: c.human_name
                                               for c in DestinationMixin.__subclasses__()})
 
 
+@csrf.exempt
 @app.route('/e/<uuid>', methods=['POST'])
 def secret_endpoint(uuid):
     endpoint = Endpoint.query.filter_by(uuid=uuid).first_or_404()
@@ -161,7 +186,7 @@ def secret_endpoint(uuid):
 @app.route('/<org_name>/endpoints/new', methods=['GET', 'POST'])
 def create_endpoint(org_name):
     form = EndpointForm(request.form)
-    if request.method == 'POST' and form.validate():
+    if form.validate_on_submit():
         org = Organization.query.filter(
             (Organization.name == org_name) &
             Organization.id.in_(
