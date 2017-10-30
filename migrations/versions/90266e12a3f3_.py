@@ -52,7 +52,7 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('created', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('template', sa.Text(), nullable=True),
-    sa.Column('type', sa.Enum('PersonalDestinationMixin', 'Webhook', 'Email', name='types'), nullable=True),
+    sa.Column('type', sa.Enum('Webhook', 'Email', name='types'), nullable=True),
     sa.Column('destination_id', sa.Integer(), nullable=True),
     sa.Column('endpoint_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['endpoint_id'], ['endpoint.id'], ),

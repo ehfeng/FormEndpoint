@@ -132,7 +132,7 @@ def create_endpoint_destination(org_name, endpoint_name, destination_type):
         ed = dest.create_endpoint_destination(**kwargs)
         db.session.add(ed)
         db.session.commit()
-        redirect(url_for('endpoint', org_name=org_name, endpoint_name=endpoint_name))
+        return redirect(url_for('endpoint', org_name=org_name, endpoint_name=endpoint_name))
 
     if issubclass(cls, PersonalDestinationMixin):
         inst = cls.query.filter_by(user_id=current_user.id).first()

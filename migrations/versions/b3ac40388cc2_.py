@@ -22,14 +22,11 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('credentials_json', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstrafint(['user_id'], ['user.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.add_column('gmail', sa.Column('data', postgresql.JSONB(astext_type=sa.Text()), nullable=True))
     # ### end Alembic commands ###
-    op.execute('ALTER TYPE types RENAME TO \'destination_types\'')
-    op.execute('ALTER TYPE destination_types ADD VALUE \'GoogleSheet\'')
-    op.execute('ALTER TYPE destination_types DROP VALUE \'PersonalDestinationMixin\'')
 
 
 def downgrade():
