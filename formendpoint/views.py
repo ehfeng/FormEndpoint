@@ -23,6 +23,7 @@ from formendpoint.helpers import handle_post
 from formendpoint.models import (
     DestinationMixin,
     Endpoint,
+    EndpointDestination,
     GooglePersonalDestination,
     GoogleSheet,
     Organization,
@@ -170,7 +171,9 @@ def endpoint(org_name, endpoint_name):
     if request.method == 'POST':
         return handle_post(request, endpoint)
 
+    endpoint_destinations = EndpointDestination.query.filter_by(endpoint_id=endpoint.id).all()
     return render_template('endpoint.html', endpoint=endpoint,
+                           endpoint_destinations=endpoint_destinations,
                            destination_types={c.dashname: c.human_name
                                               for c in DestinationMixin.__subclasses__()})
 

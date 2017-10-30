@@ -6,6 +6,10 @@
 <body>
 <div>Secret URL: {{ url_for('secret_endpoint', uuid=endpoint.uuid, _external=True) }}</div>
 <br>
+<h3>Current Destinations</h3>
+{% for endpoint_destination in endpoint_destinations %}
+	<div>{{ endpoint_destination.type }}</div>
+{% endfor %}
 <h3>Add a destination</h3>
 <form method="GET" action="">
 	<select name="destination">
