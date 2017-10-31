@@ -9,3 +9,5 @@ export REDIS_URL=
 
 export GOOGLE_CLIENT_ID=
 export GOOGLE_CLIENT_SECRET=
+export GOOGLE_APP_ID=
+export GOOGLE_PICKER_API_KEY=

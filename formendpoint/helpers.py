@@ -9,7 +9,7 @@ from flask import (
 
 from app import app, sentry
 from formendpoint.models import Post, db
-from formendpoint.tasks import process_post_request
+from formendpoint.tasks import process_post
 
 
 @app.errorhandler(500)
@@ -52,7 +52,7 @@ def handle_post(request, endpoint):
     db.session.add(post)
     db.session.commit()
 
-    process_post_request.delay(post.id)
+    process_post.delay(post.id)
 
     if 'redirect' in request.args:
         return redirect(request.args.get('redirect'))

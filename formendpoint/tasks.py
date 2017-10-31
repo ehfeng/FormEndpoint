@@ -5,12 +5,12 @@ from formendpoint.models import (
 
 
 @celery.task()
-def process_post_request(post_id):
+def process_post(post_id):
     """
     Send data to orphan or endpoint destinations.
     """
     post = Post.query.get(post_id)
-    print(post)
+    print(post.endpoint.destinations)
 
 
 # @celery.task()

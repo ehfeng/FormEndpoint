@@ -8,6 +8,23 @@ from flask_wtf.csrf import CSRFProtect
 from raven.contrib.flask import Sentry
 from raven.contrib.celery import register_logger_signal, register_signal
 
+
+def make_celery(app):
+    celery = Celery(app.import_name, backend=app.config['CELERY_RESULT_BACKEND'],
+                    broker=app.config['CELERY_BROKER_URL'])
+    celery.conf.update(app.config)
+    TaskBase = celery.Task
+
+    class ContextTask(TaskBase):
+        abstract = True
+
+        def __call__(self, *args, **kwargs):
+            with app.app_context():
+                return TaskBase.__call__(self, *args, **kwargs)
+    celery.Task = ContextTask
+    return celery
+
+
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -21,31 +38,11 @@ app.secret_key = os.environ['FLASK_SECRET_KEY']
 sentry = Sentry(app)
 register_logger_signal(sentry.client)
 register_signal(sentry.client)
-
-
-def make_celery(app):
-    celery = Celery(
-        app.import_name,
-        backend=app.config['CELERY_RESULT_BACKEND'],
-        broker=app.config['CELERY_BROKER_URL']
-    )
-    celery.conf.update(app.config)
-
-    class ContextTask(celery.Task):
-        abstract = True
-
-        def __call__(self, *args, **kwargs):
-            with app.app_context():
-                return celery.Task.__call__(self, *args, **kwargs)
-    celery.Task = ContextTask
-    return celery
-
-
 celery = make_celery(app)
-
 login_manager = LoginManager()
 login_manager.init_app(app)
 csrf = CSRFProtect(app)
 
 from formendpoint import views  # NOQA
 from formendpoint import cli  # NOQA
+from formendpoint import tasks  # NOQA

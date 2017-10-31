@@ -1,2 +1,2 @@
 web: gunicorn app:app
-worker: celery -A app.celery worker
+worker: celery -A formendpoint.tasks worker

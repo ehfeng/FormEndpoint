@@ -126,7 +126,7 @@ class User(db.Model, UserMixin):
 
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    uuid = db.Column(db.Text, unique=True, default=uuid.uuid4().hex)
+    uuid = db.Column(db.Text, unique=True, default=uuid.uuid4)
     created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
     # headers
     referrer = db.Column(db.Text, nullable=False)
@@ -144,7 +144,7 @@ class Post(db.Model):
 class Endpoint(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
-    uuid = db.Column(db.Text, unique=True, default=uuid.uuid4().hex)
+    uuid = db.Column(db.Text, unique=True, default=uuid.uuid4)
     name = db.Column(db.Text)
     secret = db.Column(db.Boolean, default=True)
     redirect = db.Column(db.Text)
