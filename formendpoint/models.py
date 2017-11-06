@@ -5,9 +5,9 @@ import os
 import re
 import string
 import uuid
-from urllib.parse import urlparse
 
 from apiclient import discovery
+from flask import abort
 from flask_login import UserMixin
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
@@ -199,25 +199,39 @@ class EndpointValidator(db.Model):
     endpoint_id = db.Column(db.Integer, db.ForeignKey('endpoint.id'), nullable=False)
 
 
-class DestinationMixin(object):
+class Destination(db.Model):
     """
     Destinations exist only to hold account-level state
     Per-endpoint data
     """
     id = db.Column(db.Integer, primary_key=True)
+    type = db.Column(db.Text, nullable=False)
+
+    endpoint_destinations = db.relationship('EndpointDestination', lazy='select', uselist=False,
+                                            backref=db.backref('destination'))
+
+    @declared_attr
+    def __mapper_args__(cls):
+        return {
+            'polymorphic_on': cls.type,
+            'polymorphic_identity': cls.__tablename__
+        }
 
     @classmethod
     def dash_to_class(cls, dashname):
-        subclass = {c.__name__: c for c in DestinationMixin.__subclasses__()}
-        return subclass[inflection.camelize(dashname.replace('-', '_'))]
+        subclass = {c.__name__: c for c in cls.__subclasses__()}
+        try:
+            return subclass[inflection.camelize(dashname.replace('-', '_'))]
+        except KeyError:
+            abort(404)
 
     @classproperty
     def dashname(cls):
         return inflection.dasherize(inflection.underscore(cls.__name__))
 
-    @classproperty
-    def human_name(cls):
-        return cls.__name__
+    @property
+    def human_name(self):
+        return inflection.humanize(self.type)
 
     @classmethod
     def is_valid(cls, value):
@@ -244,11 +258,22 @@ class DestinationMixin(object):
 
 
 class PersonalDestinationMixin(object):
-    credentials_json = db.Column(JSONB)
-
     @declared_attr
     def user_id(cls):
         return db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    @declared_attr
+    def user(cls):
+        return db.relationship('User', lazy='select', uselist=False,
+                               backref=db.backref(cls.__tablename__))
+
+
+class GoogleDestinationMixin(object):
+    scope = None
+
+    @declared_attr
+    def credentials_json(cls):
+        return db.Column(JSONB)
 
     @property
     def credentials(self):
@@ -263,10 +288,6 @@ class PersonalDestinationMixin(object):
             self.credentials_json = cred.to_json()
         else:
             self.credentials_json = cred
-
-
-class GooglePersonalDestination(PersonalDestinationMixin):
-    scope = None
 
     @property
     def service(self):
@@ -285,33 +306,14 @@ class GooglePersonalDestination(PersonalDestinationMixin):
         return flow
 
 
-class Gmail(db.Model, DestinationMixin, GooglePersonalDestination):
-    scope = 'https://www.googleapis.com/auth/gmail.send'
-
-    email = db.Column(db.Text)
-    data = db.Column(JSONB)
-
-    user = db.relationship('User', lazy='select', uselist=False, backref=db.backref('gmail'))
-
-
-class GoogleDrive(db.Model, DestinationMixin, GooglePersonalDestination):
-    scope = 'https://www.googleapis.com/auth/drive.appfolder'
-
-    @property
-    def service(self):
-        http = self.credentials.authorize(httplib2.Http())
-        return discovery.build('drive', 'v3', http=http)
-
-
-class GoogleSheet(db.Model, DestinationMixin, GooglePersonalDestination):
+class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin):
     scope = 'https://www.googleapis.com/auth/spreadsheets'
 
-    user = db.relationship('User', lazy='select',
-                           backref=db.backref('google_sheet', uselist=False))
+    id = db.Column(db.Integer, db.ForeignKey('destination.id'), primary_key=True)
 
     @classproperty
     def human_name(cls):
-        return 'Google Sheet'
+        return 'Google Sheets'
 
     @property
     def service(self):
@@ -342,7 +344,6 @@ class GoogleSheet(db.Model, DestinationMixin, GooglePersonalDestination):
 
     def create_endpoint_destination(self, endpoint, google_file_id):
         return EndpointDestination(template=self.create_template(google_file_id),
-                                   type=self.__class__.__name__,
                                    destination_id=self.id, endpoint_id=endpoint.id)
 
     def process(self, post):
@@ -352,38 +353,10 @@ class GoogleSheet(db.Model, DestinationMixin, GooglePersonalDestination):
         return {"google_file_id": google_file_id, "columns": [], "cursor": 1}
 
 
-class Webhook(db.Model, DestinationMixin):
-    url = db.Column(db.Text)
-    verified = db.Column(db.Boolean)
-
-    @classmethod
-    def is_valid(cls, value):
-        """Is this a secure url"""
-        url = urlparse(value)
-        return url.netloc and url.scheme == 'https'
-
-    def process(self, post):
-        raise NotImplemented
-
-
-class Email(db.Model, DestinationMixin):
-    sender = db.Column(db.Text)  # verified sender
-    verified = db.Column(db.Boolean)
-
-    @classmethod
-    def is_valid(cls, value):
-        return False
-
-    def process(self, post):
-        raise NotImplemented
-
-
 class EndpointDestination(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
     template = db.Column(JSONB)  # jinja for emails, field to column mapping for Google Sheets
-    type = db.Column(db.Enum(name='destination_types',
-                             *[c.__name__ for c in DestinationMixin.__subclasses__()
-                               if c != PersonalDestinationMixin]))
-    destination_id = db.Column(db.Integer)
+
+    destination_id = db.Column(db.Integer, db.ForeignKey('destination.id'), nullable=False)
     endpoint_id = db.Column(db.Integer, db.ForeignKey('endpoint.id'), nullable=False)

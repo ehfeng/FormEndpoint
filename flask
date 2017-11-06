@@ -1,0 +1,1 @@
+from formendpoint.models import *; g = GoogleSheet(user_id=2); db.session.add(g); db.session.commit() exec

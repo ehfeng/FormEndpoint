@@ -2,7 +2,6 @@ import datetime
 import os
 
 from flask import (
-    abort,
     redirect,
     render_template,
     request,
@@ -21,10 +20,10 @@ from app import app, csrf, login_manager
 from formendpoint.forms import EndpointForm
 from formendpoint.helpers import handle_post
 from formendpoint.models import (
-    DestinationMixin,
+    Destination,
     Endpoint,
     EndpointDestination,
-    GooglePersonalDestination,
+    GoogleDestinationMixin,
     GoogleSheet,
     Organization,
     OrganizationMember,
@@ -75,9 +74,9 @@ def logout():
 @login_required
 @app.route('/destinations/<destination_type>/auth-start')
 def google_auth_start(destination_type):
-    cls = [c for c in GooglePersonalDestination.__subclasses__()
+    cls = [c for c in GoogleDestinationMixin.__subclasses__()
            if c.dashname == destination_type][0]
-    if request.args.get('force') or not current_user.has_destination(GoogleSheet):
+    if request.args.get('force') or not current_user.has_destination(cls):
         redirect_uri = url_for('google_auth_finish', destination_type=destination_type,
                                _external=True)
         return redirect(cls.get_flow(redirect_uri=redirect_uri).step1_get_authorize_url())
@@ -89,7 +88,7 @@ def google_auth_start(destination_type):
 @login_required
 @app.route('/destinations/<destination_type>/auth-finish')
 def google_auth_finish(destination_type):
-    cls = [c for c in GooglePersonalDestination.__subclasses__()
+    cls = [c for c in GoogleDestinationMixin.__subclasses__()
            if c.dashname == destination_type][0]
     redirect_uri = url_for('google_auth_finish', destination_type=destination_type, _external=True)
     credentials = cls.get_flow(redirect_uri=redirect_uri).step2_exchange(request.args.get('code'))
@@ -107,9 +106,9 @@ def google_auth_finish(destination_type):
     db.session.commit()
     return redirect(url_for('index'))
 
-#########################
-# Endpoint Destinations #
-#########################
+# #########################
+# # Endpoint Destinations #
+# #########################
 
 
 @login_required
@@ -118,11 +117,7 @@ def google_auth_finish(destination_type):
 def create_endpoint_destination(org_name, endpoint_name, destination_type):
     org = Organization.query.filter_by(name=org_name).first_or_404()
     endpoint = Endpoint.query.filter_by(organization=org, name=endpoint_name).first_or_404()
-
-    try:
-        cls = DestinationMixin.dash_to_class(destination_type)
-    except KeyError:
-        abort(404)
+    cls = Destination.dash_to_class(destination_type)
 
     if request.method == 'POST':
         kwargs = {'endpoint': endpoint}
@@ -152,9 +147,9 @@ def create_endpoint_destination(org_name, endpoint_name, destination_type):
 
     return redirect(url_for('endpoint', org_name=org_name, endpoint_name=endpoint_name))
 
-#############
-# Endpoints #
-#############
+# #############
+# # Endpoints #
+# #############
 
 
 @csrf.exempt
@@ -163,7 +158,7 @@ def endpoint(org_name, endpoint_name):
     org = Organization.query.filter_by(name=org_name).first_or_404()
     endpoint = Endpoint.query.filter_by(organization=org, name=endpoint_name).first_or_404()
 
-    if request.args.get('destination') in [d.dashname for d in DestinationMixin.__subclasses__()]:
+    if request.args.get('destination') in [d.dashname for d in Destination.__subclasses__()]:
         return redirect(url_for('create_endpoint_destination', org_name=org_name,
                                 endpoint_name=endpoint_name,
                                 destination_type=request.args.get('destination')))
@@ -175,7 +170,7 @@ def endpoint(org_name, endpoint_name):
     return render_template('endpoint.html', endpoint=endpoint,
                            endpoint_destinations=endpoint_destinations,
                            destination_types={c.dashname: c.human_name
-                                              for c in DestinationMixin.__subclasses__()})
+                                              for c in Destination.__subclasses__()})
 
 
 @csrf.exempt

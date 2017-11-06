@@ -19,8 +19,13 @@
 	</select>
 	<button>Submit</button>
 </form>
-
 <br>
+<h3>Existing Destinations</h3>
+{% for endpoint_destination in endpoint.destinations %}
+<div>{{ endpoint_destination.destination.human_name }}</div>
+{% endfor %}
+<br>
+<h3>Submit new data</h3>
 <form method="POST" action="{{ url_for('secret_endpoint', uuid=endpoint.uuid) }}?redirect={{ url_for('endpoint', org_name=endpoint.organization.name, endpoint_name=endpoint.name, _external=True) }}">
 	<input type="text" name="field" autofocus="">
 	<input type="submit" value="Submit Test Data">

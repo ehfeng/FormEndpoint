@@ -10,7 +10,8 @@ def process_post(post_id):
     Send data to orphan or endpoint destinations.
     """
     post = Post.query.get(post_id)
-    print(post.endpoint.destinations)
+    for endpt_dest in post.endpoint.destinations:
+        endpt_dest.destination
 
 
 # @celery.task()
