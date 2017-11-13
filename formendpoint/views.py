@@ -155,7 +155,7 @@ def create_endpoint_destination(org_name, endpoint_name, destination_type):
     if request.method == 'POST':
         kwargs = {'endpoint': endpoint}
         if cls == GoogleSheet:
-            kwargs['google_file_id'] = request.form['google_file_id']
+            kwargs['spreadsheet_id'] = request.form['spreadsheet_id']
 
         dest = cls.query.filter_by(user_id=current_user.id).first_or_404()
         ed = dest.create_endpoint_destination(**kwargs)

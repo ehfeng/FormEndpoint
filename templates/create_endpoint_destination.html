@@ -74,7 +74,7 @@
         var fileId = data.docs[0].id;
         var xhr = new XMLHttpRequest();
         var fd = new FormData();
-        fd.append('google_file_id', fileId);
+        fd.append('spreadsheet_id', fileId);
         fd.append('csrf_token', "{{ csrf_token() }}")
         xhr.open('POST', '');
         xhr.send(fd);
