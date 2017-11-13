@@ -1,5 +1,6 @@
 alembic==0.9.5
 amqp==2.2.2
+argh==0.26.2
 billiard==3.5.0.3
 blinker==1.4
 celery==4.1.0
@@ -10,7 +11,7 @@ flake8==3.4.1
 Flask==0.12.2
 Flask-Login==0.4.0
 Flask-Migrate==2.1.1
-Flask-SQLAlchemy==2.3.0
+Flask-SQLAlchemy==2.3.2
 Flask-WTF==0.14.2
 furl==1.0.1
 google-api-python-client==1.6.4
@@ -19,13 +20,14 @@ httplib2==0.10.3
 idna==2.6
 inflection==0.3.1
 itsdangerous==0.24
-Jinja2==2.9.6
+Jinja2==2.10
 kombu==4.1.0
 Mako==1.0.7
 MarkupSafe==1.0
 mccabe==0.6.1
 oauth2client==4.1.2
 orderedmultidict==0.7.11
+pathtools==0.1.2
 psycopg2==2.7.3.1
 pyasn1==0.3.6
 pyasn1-modules==0.1.4
@@ -34,12 +36,13 @@ pyflakes==1.5.0
 python-dateutil==2.6.1
 python-editor==1.0.3
 pytz==2017.2
+PyYAML==3.12
 raven==6.2.1
 redis==2.10.6
 requests==2.18.4
 rsa==3.4.2
 six==1.11.0
-SQLAlchemy==1.1.14
+SQLAlchemy==1.1.15
 uritemplate==3.0.0
 urllib3==1.22
 vine==1.1.4

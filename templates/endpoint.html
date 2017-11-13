@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title></title>
+	<title>FormEndpoint</title>
+	<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+	<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+	<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+	<link rel="mask-icon" href="{{ url_for('static', filename='safari-pinned-tab.svg') }}" color="#5bbad5">
+	<meta name="theme-color" content="#ffffff">
 </head>
 <body>
 <div>Secret URL: {{ url_for('secret_endpoint', uuid=endpoint.uuid, _external=True) }}</div>
@@ -21,13 +26,15 @@
 </form>
 <br>
 <h3>Existing Destinations</h3>
-{% for endpoint_destination in endpoint.destinations %}
+{% for endpoint_destination in endpoint.endpoint_destinations %}
 <div>{{ endpoint_destination.destination.human_name }}</div>
 {% endfor %}
 <br>
 <h3>Submit new data</h3>
 <form method="POST" action="{{ url_for('secret_endpoint', uuid=endpoint.uuid) }}?redirect={{ url_for('endpoint', org_name=endpoint.organization.name, endpoint_name=endpoint.name, _external=True) }}">
 	<input type="text" name="field" autofocus="">
+	<input type="text" name="another_field">
+	<input type="text" name="third_field">
 	<input type="submit" value="Submit Test Data">
 </form>
 <br>

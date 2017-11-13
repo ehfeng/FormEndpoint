@@ -5,6 +5,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_from_directory,
     url_for
 )
 from flask_login import (
@@ -18,7 +19,6 @@ from furl import furl
 from app import app, csrf, login_manager
 
 from formendpoint.forms import EndpointForm
-from formendpoint.helpers import handle_post
 from formendpoint.models import (
     Destination,
     Endpoint,
@@ -28,6 +28,7 @@ from formendpoint.models import (
     Organization,
     OrganizationMember,
     PersonalDestinationMixin,
+    Post,
     User,
     db,
 )
@@ -36,6 +37,32 @@ DEMO_URL = 'https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4E
 GOOGLE_PICKER_API_KEY = os.environ['GOOGLE_PICKER_API_KEY']
 GOOGLE_CLIENT_ID = os.environ['GOOGLE_CLIENT_ID']
 GOOGLE_APP_ID = os.environ['GOOGLE_APP_ID']
+
+
+def handle_post(request, endpoint):
+    ip_address = request.remote_addr if request.remote_addr != '127.0.0.1' \
+        else request.headers.get('X-Forwarded-For')
+
+    post = Post(
+        data=request.form.to_dict(),
+        organization_id=endpoint.organization.id,
+        endpoint_id=endpoint.id,
+        referrer=request.headers.get('REFERER'),
+        user_agent=request.args.get('USER-AGENT'),
+        ip_address=ip_address,
+    )
+    db.session.add(post)
+    db.session.commit()
+
+    from formendpoint.tasks import process_post
+    process_post.delay(post.id)
+
+    if 'redirect' in request.args:
+        return redirect(request.args.get('redirect'))
+    elif endpoint.redirect:
+        return redirect(endpoint.redirect)
+    else:
+        return redirect(url_for('success', org_name=endpoint.organization.name, _external=True))
 
 
 @login_manager.user_loader
@@ -49,6 +76,12 @@ def index():
     url.args['destination'] = DEMO_URL
     form = render_template('form.html', url=url.url, input='<input type="email" name="email">')
     return render_template('index.html', form=form, demo_url=DEMO_URL)
+
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico',
+                               mimetype='image/vnd.microsoft.icon')
 
 
 @app.route('/login/<validation_hash>')
