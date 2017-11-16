@@ -1,4 +1,7 @@
+{% extends 'base.html' %}
 {% from "_formhelpers.html" import render_field %}
+
+{% block content %}
 <form method=post>
   <dl>
   	{{ form.csrf_token }}
@@ -7,3 +10,4 @@
   </dl>
   <p><input type=submit value="Create Endpoint">
 </form>
+{% endblock %}

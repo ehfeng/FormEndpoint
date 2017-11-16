@@ -23,6 +23,7 @@ from formendpoint.models import (
     Destination,
     Endpoint,
     EndpointDestination,
+    Gmail,
     GoogleDestinationMixin,
     GoogleSheet,
     Organization,
@@ -125,16 +126,16 @@ def google_auth_finish(destination_type):
            if c.dashname == destination_type][0]
     redirect_uri = url_for('google_auth_finish', destination_type=destination_type, _external=True)
     credentials = cls.get_flow(redirect_uri=redirect_uri).step2_exchange(request.args.get('code'))
-
-    if current_user.google_sheet:
-        current_user.google_sheet.credentials_json = credentials.to_json()
-        db.session.add(current_user.google_sheet)
+    inst = cls.query.filter_by(user=current_user).first()
+    if inst:
+        inst.credentials_json = credentials.to_json()
+        db.session.add(inst)
     else:
-        gs = GoogleSheet(
+        inst = cls(
             user_id=current_user.id,
             credentials_json=credentials.to_json()
         )
-        db.session.add(gs)
+        db.session.add(inst)
 
     db.session.commit()
     return redirect(url_for('index'))
@@ -156,6 +157,8 @@ def create_endpoint_destination(org_name, endpoint_name, destination_type):
         kwargs = {'endpoint': endpoint}
         if cls == GoogleSheet:
             kwargs['spreadsheet_id'] = request.form['spreadsheet_id']
+        elif cls == Gmail:
+            kwargs['template'] = request.form['template']
 
         dest = cls.query.filter_by(user_id=current_user.id).first_or_404()
         ed = dest.create_endpoint_destination(**kwargs)
@@ -166,7 +169,7 @@ def create_endpoint_destination(org_name, endpoint_name, destination_type):
     if issubclass(cls, PersonalDestinationMixin):
         inst = cls.query.filter_by(user_id=current_user.id).first()
         if inst:
-            return render_template('create_endpoint_destination.html',
+            return render_template('endpoint_destination/%s.html' % destination_type,
                                    google_picker_api_key=GOOGLE_PICKER_API_KEY,
                                    google_client_id=GOOGLE_CLIENT_ID,
                                    google_app_id=GOOGLE_APP_ID,

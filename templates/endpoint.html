@@ -1,14 +1,7 @@
-<!DOCTYPE html>
-<html>
-<head>
-	<title>FormEndpoint</title>
-	<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
-	<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
-	<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
-	<link rel="mask-icon" href="{{ url_for('static', filename='safari-pinned-tab.svg') }}" color="#5bbad5">
-	<meta name="theme-color" content="#ffffff">
-</head>
-<body>
+{% extends 'base.html' %}
+
+{% block content %}
+
 <div>Secret URL: {{ url_for('secret_endpoint', uuid=endpoint.uuid, _external=True) }}</div>
 <br>
 <h3>Current Destinations</h3>
@@ -42,5 +35,5 @@
 <div><code>{{ post.uuid }}</code></div>
 <pre>{{ post.data }}</pre>
 {% endfor %}
-</body>
-</html>
+
+{% endblock %}

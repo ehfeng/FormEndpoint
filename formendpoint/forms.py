@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import BooleanField, SelectField, StringField, validators
+from wtforms import BooleanField, SelectField, StringField, TextAreaField, validators
 
 
 class EndpointForm(FlaskForm):
@@ -9,3 +9,9 @@ class EndpointForm(FlaskForm):
 
 class GoogleSheetForm(FlaskForm):
     spreadsheet = SelectField('Destination spreadsheet', choices=[('', 'Create new spreadsheet')])
+
+
+class GmailForm(FlaskForm):
+    sender = StringField('From', validators=[validators.Email('must be an email address')])
+    recipient = StringField('To', validators=[validators.Email('must be an email address')])
+    body = TextAreaField('Email template')

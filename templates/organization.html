@@ -1,9 +1,8 @@
-<!DOCTYPE html>
-<html>
-<head>
-	<title>{{ org.name }}</title>
-</head>
-<body>
+{% extends 'base.html' %}
+
+{% block title %}<title>{{ org.name }}</title>{% endblock %}
+
+{% block content %}
 	{% if current_user.is_member(org) %}
 	<h1>{{ org.name }} Profile</h1>
 	<br>
@@ -26,5 +25,5 @@
 		{% endif %}
 	</div>
 	{% endif %}
-</body>
-</html>
+
+{% endblock %}

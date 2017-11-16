@@ -12,6 +12,7 @@ from flask import abort
 from flask_login import UserMixin
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
+from jinja2 import Environment
 from oauth2client.client import OAuth2Credentials, OAuth2WebServerFlow
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declared_attr
@@ -20,7 +21,7 @@ from sqlalchemy.sql import func
 from sqlalchemy.sql.expression import literal
 
 from app import app
-from formendpoint.forms import GoogleSheetForm
+from formendpoint.forms import GmailForm, GoogleSheetForm
 
 GOOGLE_SHEETS_DISCOVERY_URL = 'https://sheets.googleapis.com/$discovery/rest?version=v4'
 GOOGLE_DRIVE_DISCOVERY_URL = 'https://drive.googleapis.com/$discovery/rest?version=v2'
@@ -520,6 +521,31 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
             spreadsheetId=spreadsheet_id,
             body={'requests': requests}
         ).execute()
+
+
+class Gmail(Destination, PersonalDestinationMixin, GoogleDestinationMixin):
+    scope = 'https://www.googleapis.com/auth/gmail.send'
+
+    id = db.Column(db.Integer, db.ForeignKey('destination.id'), primary_key=True)
+
+    @classproperty
+    def human_name(cls):
+        return 'Gmail'
+
+    @property
+    def service(self):
+        http = self.credentials.authorize(httplib2.Http())
+        return discovery.build('gmail', 'v1',
+                               http=http)
+
+    @property
+    def form(self):
+        return GmailForm()
+
+    def create_endpoint_destination(self, endpoint, template):
+        env = Environment()
+        env.parse(template)
+        return EndpointDestination(template=template)
 
 
 class EndpointDestination(db.Model):
