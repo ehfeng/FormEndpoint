@@ -1,5 +1,6 @@
 import base64
 from collections import UserList
+from copy import deepcopy
 import datetime
 from email.mime.text import MIMEText
 import httplib2
@@ -439,7 +440,8 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
 
         # Create field column developer metadata DimensionRanges
         for index, fieldname in enumerate(fieldnames):
-            requests.append(self.create_developer_metadata_request(sheet_id, fieldname, index))
+            requests.append(self.create_developer_metadata_request(sheet_id, fieldname,
+                                                                   insert_at_index + index))
 
         replies = self.service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id, body={'requests': requests}).execute()['replies'][3:]
@@ -477,7 +479,7 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
                                           {f: columns[f]['metadataId'] for f in columns}),
             destination_id=self.id, endpoint_id=endpoint.id)
 
-    def create_rows(self, developer_metadata_dict, post):
+    def create_row(self, developer_metadata_dict, post):
         row = defaultlist()
         d = {developer_metadata_dict[k]['location']['dimensionRange']['startIndex']: k
              for k in developer_metadata_dict}
@@ -515,11 +517,15 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
                                                                           fieldnames_to_create,
                                                                           furtherest_index)
         developer_metadata.update(new_developer_metadata)
+        template_copy = deepcopy(endpoint_destination.template)
+        template_copy['columns'].update({k: new_developer_metadata[k]['metadataId']
+                                         for k in new_developer_metadata})
+        endpoint_destination.template = template_copy
         db.session.add(endpoint_destination)
         db.session.commit()
 
         # Create Rows
-        rows = self.create_rows(developer_metadata, post)
+        rows = self.create_row(developer_metadata, post)
         requests.append({'appendCells': {
             'sheetId': sheet_id,
             'rows': rows,
@@ -545,7 +551,7 @@ class Gmail(Destination, PersonalDestinationMixin, GoogleDestinationMixin):
     def service(self):
         http = self.credentials.authorize(httplib2.Http())
         return discovery.build('gmail', 'v1',
-                               http=http)
+                               http=http, cache_discovery=False)
 
     def get_form(self, org):
         choices = [(email, email) for email, in User.query.filter(User.verified and

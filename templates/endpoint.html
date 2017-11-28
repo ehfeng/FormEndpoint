@@ -27,12 +27,13 @@
 <form method="POST" action="{{ url_for('secret_endpoint', uuid=endpoint.uuid) }}?redirect={{ url_for('endpoint', org_name=endpoint.organization.name, endpoint_name=endpoint.name, _external=True) }}">
 	<input type="email" name="email" autofocus="">
 	<input type="text" name="name">
-	<input type="text" name="last_name">
+	<input type="text" name="zip">
 	<input type="submit" value="Submit Test Data">
 </form>
 <br>
-{% for post in endpoint.posts %}
+{% for post in endpoint.posts | sort(attribute='created', reverse=True) %}
 <div><code>{{ post.uuid }}</code></div>
+<div>{{ post.created }}</div>
 <pre>{{ post.data }}</pre>
 {% endfor %}
 

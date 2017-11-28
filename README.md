@@ -17,3 +17,9 @@
 3. Done!
 
 ![Example](https://github.com/ehfeng/FormEndpoint/raw/master/static/out.gif)
+
+## Development
+
+`source .env`
+`flask run`
+`watchmedo shell-command --patterns="*.py" --recursive --command='pkill -f celery; celery -A formendpoint.tasks.celery worker'`
