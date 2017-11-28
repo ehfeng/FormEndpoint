@@ -1,5 +1,7 @@
+import base64
 from collections import UserList
 import datetime
+from email.mime.text import MIMEText
 import httplib2
 import inflection
 import os
@@ -12,7 +14,7 @@ from flask import abort
 from flask_login import UserMixin
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
-from jinja2 import Environment
+from jinja2 import Environment, Template
 from oauth2client.client import OAuth2Credentials, OAuth2WebServerFlow
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declared_attr
@@ -209,6 +211,7 @@ class EndpointValidator(db.Model):
     key = db.Column(db.Text, nullable=False)
     datatype = db.Column(db.Enum(name='datatypes', *ENDPOINT_VALIDATOR_DATATYPES), nullable=False)
     data = db.Column(JSONB)  # for enum, multiple, list, range constraints
+    error_message = db.Column(db.Text)
 
     endpoint_id = db.Column(db.Integer, db.ForeignKey('endpoint.id'), nullable=False)
 
@@ -265,7 +268,7 @@ class Destination(db.Model):
     def create_endpoint_destination(self, endpoint, **kwargs):
         raise NotImplemented
 
-    def form(self):
+    def get_form(self):
         raise NotImplemented
 
     def process(self, post, endpoint_destination):
@@ -347,8 +350,7 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
                                discoveryServiceUrl=GOOGLE_SHEETS_DISCOVERY_URL,
                                cache_discovery=False)
 
-    @property
-    def form(self):
+    def get_form(self, org):
         return GoogleSheetForm()
 
     @staticmethod
@@ -404,7 +406,9 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
             }}}
 
     def create_endpoint_destination_columns(self, spreadsheet_id, sheet_id, fieldnames,
-                                            insert_at_index=0):
+                                            furtherest_index=-1):
+        insert_at_index = furtherest_index + 1
+
         requests = [
             {'insertDimension': {
                 'range': {
@@ -441,7 +445,7 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
             spreadsheetId=spreadsheet_id, body={'requests': requests}).execute()['replies'][3:]
 
         return dict(zip(fieldnames,
-                        [reply['createDeveloperMetadata']['developerMetadata']['metadataId']
+                        [reply['createDeveloperMetadata']['developerMetadata']
                             for reply in replies]))
 
     def create_new_sheet(self, endpoint, spreadsheet_id):
@@ -449,7 +453,7 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
             spreadsheetId=spreadsheet_id,
             body={'requests': [{'addSheet': {
                 'properties': {
-                    'title': 'FormEndpoint.com/%s/%s' % (
+                    'title': 'formendpoint.com/%s/%s' % (
                         endpoint.organization.name, endpoint.name
                     ),
                     'tabColor': {'blue': 1, 'red': 1}
@@ -469,15 +473,18 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
         columns = self.create_endpoint_destination_columns(spreadsheet_id, sheet_id, fieldnames)
 
         return EndpointDestination(
-            template=self.create_template(spreadsheet_id, sheet_id, columns),
+            template=self.create_template(spreadsheet_id, sheet_id,
+                                          {f: columns[f]['metadataId'] for f in columns}),
             destination_id=self.id, endpoint_id=endpoint.id)
 
     def create_rows(self, developer_metadata_dict, post):
         row = defaultlist()
         d = {developer_metadata_dict[k]['location']['dimensionRange']['startIndex']: k
              for k in developer_metadata_dict}
+
         for i in d:
-            row[i] = post.data[d[i]]
+            if d[i] in post.data:
+                row[i] = post.data[d[i]]
         return [{'values': [{'userEnteredValue': {'stringValue': value}} for value in row]}]
 
     def process(self, post, endpoint_destination):
@@ -494,8 +501,9 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
                 spreadsheetId=spreadsheet_id, metadataId=metadata_id).execute()
 
         # Create missing columns
-        furtherest_index = max([developer_metadata[i]['location']['dimensionRange']['startIndex']
-                                for i in developer_metadata])
+        indices = [developer_metadata[i]['location']['dimensionRange']['startIndex']
+                   for i in developer_metadata]
+        furtherest_index = max(indices, default=-1)
 
         fieldnames_to_create = list(post.data.keys()).copy()
         for fieldname in post.data.keys():
@@ -505,12 +513,13 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
 
         new_developer_metadata = self.create_endpoint_destination_columns(spreadsheet_id, sheet_id,
                                                                           fieldnames_to_create,
-                                                                          furtherest_index + 1)
+                                                                          furtherest_index)
         developer_metadata.update(new_developer_metadata)
+        db.session.add(endpoint_destination)
+        db.session.commit()
 
         # Create Rows
         rows = self.create_rows(developer_metadata, post)
-
         requests.append({'appendCells': {
             'sheetId': sheet_id,
             'rows': rows,
@@ -538,14 +547,37 @@ class Gmail(Destination, PersonalDestinationMixin, GoogleDestinationMixin):
         return discovery.build('gmail', 'v1',
                                http=http)
 
-    @property
-    def form(self):
-        return GmailForm()
+    def get_form(self, org):
+        choices = [(email, email) for email, in User.query.filter(User.verified and
+                   User.id.in_(OrganizationMember.query.filter_by(organization=org).with_entities(
+                       OrganizationMember.user_id))).with_entities(User.email).all()]
+        return GmailForm(choices)
 
-    def create_endpoint_destination(self, endpoint, template):
+    def create_template(self, sender, subject, body):
+        """
+        subject:
+        body:
+        """
+        return {'sender': sender, 'subject': subject, 'body': body}
+
+    def create_endpoint_destination(self, endpoint, sender, subject, body):
         env = Environment()
-        env.parse(template)
-        return EndpointDestination(template=template)
+        # Validate
+        env.parse(subject)
+        env.parse(body)
+
+        return EndpointDestination(template=self.create_template(sender, subject, body),
+                                   endpoint_id=endpoint.id,
+                                   destination_id=self.id)
+
+    def process(self, post, endpoint_destination):
+        body_template = Template(endpoint_destination.template['body'])
+        message = MIMEText(body_template.render(**post.data))
+        message['to'] = post.data['email']
+        message['subject'] = endpoint_destination.template['subject']
+        self.service.users().messages().send(userId='me', body={
+            'raw': base64.urlsafe_b64encode(message.as_bytes()).decode()
+        }).execute()
 
 
 class EndpointDestination(db.Model):

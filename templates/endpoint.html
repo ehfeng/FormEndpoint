@@ -25,9 +25,9 @@
 <br>
 <h3>Submit new data</h3>
 <form method="POST" action="{{ url_for('secret_endpoint', uuid=endpoint.uuid) }}?redirect={{ url_for('endpoint', org_name=endpoint.organization.name, endpoint_name=endpoint.name, _external=True) }}">
-	<input type="text" name="field" autofocus="">
-	<input type="text" name="another_field">
-	<input type="text" name="third_field">
+	<input type="email" name="email" autofocus="">
+	<input type="text" name="name">
+	<input type="text" name="last_name">
 	<input type="submit" value="Submit Test Data">
 </form>
 <br>

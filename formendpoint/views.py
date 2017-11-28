@@ -1,5 +1,7 @@
+from collections import defaultdict
 import datetime
 import os
+from urllib.parse import parse_qsl, urlparse
 
 from flask import (
     redirect,
@@ -41,11 +43,52 @@ GOOGLE_APP_ID = os.environ['GOOGLE_APP_ID']
 
 
 def handle_post(request, endpoint):
+    """
+    Data priority:
+    1. Form data
+    2. JSON body data
+    3. request URL parameters
+    4. referrer URL parameters
+
+    Referrer parameters are not necessarily meaningful, but better to store in case.
+    Within form or query params, you can have overlapping names to send lists, but
+    between form, body, or query params, names overwrite.
+
+    Special fields: email, redirect, names ending in ~
+    """
+
+    # Referrer
+    data = defaultdict(list)
+    for k, v in parse_qsl(urlparse(request.headers.get('REFERER')).query, keep_blank_values=True):
+        data[k].append(v)
+
+    # Request
+    for arg in request.args:
+        data[arg] = request.args.getlist(arg) or data[arg]
+
+    # Body
+    data.update(request.get_json() or {})
+
+    # Form
+    for field in request.form:
+        data[field] = request.form.getlist(field) or data[field]
+
+    # Flatten single item lists
+    for k in data:
+        if isinstance(data[k], list) and len(data[k]) == 1:
+            data[k] = data[k][0]
+
+    # remove `redirect`
+    try:
+        del data['redirect']
+    except KeyError:
+        pass
+
     ip_address = request.remote_addr if request.remote_addr != '127.0.0.1' \
         else request.headers.get('X-Forwarded-For')
 
     post = Post(
-        data=request.form.to_dict(),
+        data=dict(data),
         organization_id=endpoint.organization.id,
         endpoint_id=endpoint.id,
         referrer=request.headers.get('REFERER'),
@@ -158,7 +201,9 @@ def create_endpoint_destination(org_name, endpoint_name, destination_type):
         if cls == GoogleSheet:
             kwargs['spreadsheet_id'] = request.form['spreadsheet_id']
         elif cls == Gmail:
-            kwargs['template'] = request.form['template']
+            kwargs['sender'] = request.form['sender']
+            kwargs['subject'] = request.form['subject']
+            kwargs['body'] = request.form['body']
 
         dest = cls.query.filter_by(user_id=current_user.id).first_or_404()
         ed = dest.create_endpoint_destination(**kwargs)
@@ -173,7 +218,7 @@ def create_endpoint_destination(org_name, endpoint_name, destination_type):
                                    google_picker_api_key=GOOGLE_PICKER_API_KEY,
                                    google_client_id=GOOGLE_CLIENT_ID,
                                    google_app_id=GOOGLE_APP_ID,
-                                   form=inst.form)
+                                   form=inst.get_form(org))
 
         return redirect(url_for('google_auth_start', destination_type=destination_type))
 

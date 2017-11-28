@@ -12,6 +12,10 @@ class GoogleSheetForm(FlaskForm):
 
 
 class GmailForm(FlaskForm):
-    sender = StringField('From', validators=[validators.Email('must be an email address')])
-    recipient = StringField('To', validators=[validators.Email('must be an email address')])
-    body = TextAreaField('Email template')
+    sender = SelectField('From')
+    subject = StringField('subject')
+    body = TextAreaField('Email template', validators=[validators.DataRequired()])
+
+    def __init__(self, choices):
+        super().__init__()
+        self.sender.choices = choices
