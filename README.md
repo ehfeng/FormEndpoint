@@ -7,7 +7,7 @@
 1. Set the form `action` to your FormEndpoint profile.
 
 ```html
-<form action="https://formendpoint.com/demo" method="POST">
+<form action="https://formendpoint.com/1" method="POST">
    <!-- add inputs -->
 </form>
 ```
@@ -23,3 +23,4 @@
 `source .env`
 `flask run`
 `watchmedo shell-command --patterns="*.py" --recursive --command='pkill -f celery; celery -A formendpoint.tasks.celery worker'`
+`sass --watch static/main.scss:static/main.css`

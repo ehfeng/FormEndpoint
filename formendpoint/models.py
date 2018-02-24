@@ -21,7 +21,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import validates
 from sqlalchemy.sql import func
-from sqlalchemy.sql.expression import literal
 
 from app import app
 from formendpoint.forms import GmailForm, GoogleSheetForm
@@ -61,17 +60,6 @@ db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
 
-class OrganizationMember(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
-    owner = db.Column(db.Boolean, default=False)
-
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'))
-
-    __repr__ = sane_repr('organization_id', 'user_id')
-
-
 class Organization(db.Model):
     """
     Personal organizations have only one member
@@ -79,22 +67,20 @@ class Organization(db.Model):
     """
     id = db.Column(db.Integer, primary_key=True)
     created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
-    name = db.Column(db.String, unique=True)
-    personal = db.Column(db.Boolean, default=True)
+    name = db.Column(db.Text)
 
-    user = db.relationship('User', lazy='select', uselist=False,
-                           backref=db.backref('personal_organization'))
+    submissions = db.relationship('Submission', secondary='endpoint')
     endpoints = db.relationship('Endpoint', lazy='select', backref=db.backref('organization'))
-    members = db.relationship('OrganizationMember', lazy='select',
-                              backref=db.backref('organization'))
 
     __repr__ = sane_repr('name')
 
     @validates('name')
     def validate_name(self, key, name):
-        """Name must be at least 3 characters long"""
-        assert len(name) > 2
-        assert name != 'destinations'
+        """Name must be at least 3 characters long and all lowercase"""
+        if len(name) < 3:
+            raise ValueError('Organization name must be more than 2 characters.')
+        if name.lower() == 'destinations':
+            raise ValueError('Organization name cannot be %s' % name)
         return name
 
 
@@ -102,33 +88,21 @@ class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
     email = db.Column(db.Text, unique=True, nullable=False)
+    name = db.Column(db.Text)
+    role = db.Column(db.Text)  # owner, member
+
     verified = db.Column(db.Boolean, default=False)
     validation_hash = db.Column(db.Text)
     validation_hash_added = db.Column(db.DateTime)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'))
 
-    personal_organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), unique=True)
-
-    memberships = db.relationship('OrganizationMember', lazy='select', backref=db.backref('user'))
+    organization = db.relationship('Organization', lazy='select', backref=db.backref('users'))
 
     __repr__ = sane_repr('email')
 
     def refresh_validation_hash(self):
         self.validation_hash = uuid.uuid4().hex
         self.validation_hash_added = datetime.datetime.now()
-
-    def is_owner(self, organization):
-        return db.session.query(OrganizationMember.query.filter_by(
-            user_id=self.id,
-            owner=True,
-            organization_id=organization.id
-        ).exists()).scalar()
-
-    def is_member(self, organization):
-        exists_query = OrganizationMember.query.filter_by(
-            user_id=self.id,
-            organization_id=organization.id
-        ).exists()
-        return db.session.query(exists_query).scalar()
 
     def has_destination(self, cls):
         assert issubclass(cls, PersonalDestinationMixin)
@@ -137,7 +111,30 @@ class User(db.Model, UserMixin):
         return self.is_authenticated and pd and pd.credentials and pd.credentials.refresh_token
 
 
-class Post(db.Model):
+class Endpoint(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
+    name = db.Column(db.Text)
+    redirect = db.Column(db.Text)  # redirect
+    _referrer = db.Column(db.String)  # restict on referrer ORIGIN POSIX regex
+    strict = db.Column(db.Boolean, default=False)  # Whether non-validated fields are allowed
+
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False)
+
+    submissions = db.relationship('Submission', lazy='select',
+                                  backref=db.backref('endpoint', lazy='joined'))
+    endpoint_destinations = db.relationship('EndpointDestination', lazy='select',
+                                            backref=db.backref('endpoint', lazy='joined'))
+    validators = db.relationship('Validator', lazy='select',
+                                 backref=db.backref('endpoint', lazy='joined'))
+
+    def get_fieldnames(self):
+        return sorted([x[0] for x in db.engine.execute(
+            'select distinct jsonb_object_keys(data) from {} where endpoint_id={}'
+            .format(Submission.__tablename__, self.id)).fetchall()])
+
+
+class Submission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     uuid = db.Column(db.Text, unique=True, default=uuid.uuid4)
     created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
@@ -148,58 +145,13 @@ class Post(db.Model):
     # body data
     data = db.Column(JSONB, nullable=False)
 
-    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False)
-    endpoint_id = db.Column(db.Integer, db.ForeignKey('endpoint.id'), nullable=True)
+    endpoint_id = db.Column(db.Integer, db.ForeignKey('endpoint.id'), nullable=False)
 
-    __repr__ = sane_repr('uuid', 'organization_id', 'endpoint_id')
+    __repr__ = sane_repr('endpoint_id', 'uuid')
 
     def process(self):
-        for endpoint_destination in self.endpoint.endpoint_destinations:
-            endpoint_destination.process(self)
-
-
-class Endpoint(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
-    uuid = db.Column(db.Text, unique=True, default=uuid.uuid4)
-    name = db.Column(db.Text)
-    secret = db.Column(db.Boolean, default=True)
-    redirect = db.Column(db.Text)
-    _referrer = db.Column(db.String)  # ORIGIN POSIX regex
-    strict = db.Column(db.Boolean, default=False)  # Whether non-validated fields are allowed
-
-    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'))
-
-    posts = db.relationship('Post', lazy='select', backref=db.backref('endpoint', lazy='joined'))
-    endpoint_destinations = db.relationship('EndpointDestination', lazy='select',
-                                            backref=db.backref('endpoint', lazy='joined'))
-
-    __repr__ = sane_repr('name', 'uuid', 'organization_id')
-
-    @property
-    def referrer(self):
-        return re.sub('_', '?', re.sub('%', '*', self._referrer))
-
-    @referrer.setter
-    def referrer(self, value):
-        self._referrer = re.sub('\?', '_', re.sub('\*', '%', self.value))
-
-    @classmethod
-    def create_for_destination(cls):
-        """
-        Automatically create a Endpoint for Google Sheet
-        """
-        return None
-
-    @classmethod
-    def get_for_referrer(cls, referrer, organization):
-        return cls.query.filter((cls.organization == organization) &
-                                (literal(referrer).ilike(cls._referrer))).all()
-
-    @classmethod
-    def get_by_referrer(cls, referrer, user):
-        # TODO
-        raise NotImplemented
+        for ed in self.endpoint.endpoint_destinations:
+            ed.process(self)
 
 
 # List = multi enum
@@ -207,14 +159,15 @@ ENDPOINT_VALIDATOR_DATATYPES = ('string', 'boolean', 'integer', 'email', 'url', 
                                 'datetime', 'enum', 'list', 'range', 'file')
 
 
-class EndpointValidator(db.Model):
+class Validator(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    referrer = db.Column(db.String, nullable=False)
     key = db.Column(db.Text, nullable=False)
     datatype = db.Column(db.Enum(name='datatypes', *ENDPOINT_VALIDATOR_DATATYPES), nullable=False)
     data = db.Column(JSONB)  # for enum, multiple, list, range constraints
     error_message = db.Column(db.Text)
 
-    endpoint_id = db.Column(db.Integer, db.ForeignKey('endpoint.id'), nullable=False)
+    endpoint_id = db.Column(db.Integer, db.ForeignKey('endpoint.id'))
 
 
 class Destination(db.Model):
@@ -224,9 +177,6 @@ class Destination(db.Model):
     """
     id = db.Column(db.Integer, primary_key=True)
     type = db.Column(db.Text, nullable=False)
-
-    endpoint_destinations = db.relationship('EndpointDestination', lazy='select',
-                                            backref=db.backref('destination'))
 
     @declared_attr
     def __mapper_args__(cls):
@@ -270,6 +220,7 @@ class Destination(db.Model):
         raise NotImplemented
 
     def get_form(self):
+        # Create destination form
         raise NotImplemented
 
     def process(self, post, endpoint_destination):
@@ -384,9 +335,6 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
             "columns": columns, 'protected': False
         }
 
-    def get_fieldnames(self, endpoint):
-        return set([field for post in endpoint.posts for field in post.data.keys()])
-
     def developer_metadata_location(self, sheet_id, index):
         return {
             'dimensionRange': {
@@ -466,7 +414,7 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
 
     def create_endpoint_destination(self, endpoint, spreadsheet_id):
         # Get all field types
-        fieldnames = self.get_fieldnames(endpoint)
+        fieldnames = endpoint.get_fieldnames()
 
         # Create a new sheet to write to
         sheet_id = self.create_new_sheet(endpoint, spreadsheet_id)
@@ -554,9 +502,9 @@ class Gmail(Destination, PersonalDestinationMixin, GoogleDestinationMixin):
                                http=http, cache_discovery=False)
 
     def get_form(self, org):
+        # TODO
         choices = [(email, email) for email, in User.query.filter(User.verified and
-                   User.id.in_(OrganizationMember.query.filter_by(organization=org).with_entities(
-                       OrganizationMember.user_id))).with_entities(User.email).all()]
+                   User.id.in_()).with_entities(User.email).all()]
         return GmailForm(choices)
 
     def create_template(self, sender, subject, body):
@@ -594,7 +542,7 @@ class EndpointDestination(db.Model):
     destination_id = db.Column(db.Integer, db.ForeignKey('destination.id'), nullable=False)
     endpoint_id = db.Column(db.Integer, db.ForeignKey('endpoint.id'), nullable=False)
 
-    __repr__ = sane_repr('destination_id', 'endpoint_id')
+    __repr__ = sane_repr('destination_id', 'organization_id')
 
     def process(self, post):
         return self.destination.process(post, self)

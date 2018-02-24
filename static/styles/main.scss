@@ -1,0 +1,113 @@
+$background-grey: #6c757d;
+
+body {
+  padding: 0;
+  margin: 0;
+  background-color: $background-grey;
+}
+
+.main {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: row;
+
+  font-family: sans-serif;
+}
+
+.sidebar {
+  width: 200px;
+  height: 100%;
+  background-color: $background-grey;
+  color: #eaeaea;
+  padding: 16px;
+
+  select {
+    font-size: 24px;
+    border: 0;
+    width: 100%;
+    margin-left: -8px;
+    color: #eaeaea;
+    background: transparent;
+  }
+
+  .endpoint {
+    font-size: 22px;
+  }
+
+  .name {
+    font-size: 22px;
+
+    // overflow: hidden;
+    // white-space: nowrap;
+    // text-overflow: ellipsis;
+  }
+
+  .section {
+    div {
+      font-size: 20px;
+      margin-bottom: 16px;
+    }
+
+    .subsection {
+      margin-left: 12px;
+
+      div {
+        font-size: 16px;
+        margin-bottom: 12px;
+      }
+    }
+  }
+}
+
+.content {
+  width: 100%;
+  height: 100vh;
+  justify-content: stretch;
+  overflow: scroll;
+  background-color: white;
+
+  padding: 16px;
+
+  .content-header {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+
+    .search-box {
+      justify-content: stretch;
+      flex-grow: 1;
+      border-bottom: 1px solid grey;
+
+      input {
+        border: none;
+        padding: 4px;
+        box-sizing: border-box;
+        font-size: 18px;
+        width: 100%;
+      }
+
+      input:focus {
+        outline: none;
+      }
+    }
+    .account {
+      margin-left: 16px;
+      padding: 4px;
+
+      a {
+        color: black;
+        font-size: 18px;
+        text-decoration: none;
+      }
+    }
+  }
+
+  .endpoint-submissions {
+    td {
+      padding: 4px;
+    }
+  }
+}
+
+

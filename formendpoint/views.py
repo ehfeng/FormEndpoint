@@ -4,6 +4,7 @@ import os
 from urllib.parse import parse_qsl, urlparse
 
 from flask import (
+    abort,
     redirect,
     render_template,
     request,
@@ -24,14 +25,11 @@ from formendpoint.forms import EndpointForm
 from formendpoint.models import (
     Destination,
     Endpoint,
-    EndpointDestination,
     Gmail,
     GoogleDestinationMixin,
     GoogleSheet,
-    Organization,
-    OrganizationMember,
     PersonalDestinationMixin,
-    Post,
+    Submission,
     User,
     db,
 )
@@ -42,19 +40,23 @@ GOOGLE_CLIENT_ID = os.environ['GOOGLE_CLIENT_ID']
 GOOGLE_APP_ID = os.environ['GOOGLE_APP_ID']
 
 
-def handle_post(request, endpoint):
+def handle_submission(request, endpoint):
     """
     Data priority:
     1. Form data
     2. JSON body data
-    3. request URL parameters
-    4. referrer URL parameters
+    3. request query parameters
+    4. referrer query parameters
 
     Referrer parameters are not necessarily meaningful, but better to store in case.
     Within form or query params, you can have overlapping names to send lists, but
     between form, body, or query params, names overwrite.
 
-    Special fields: email, redirect, names ending in ~
+    Special fields: email, referrer, next, names ending in ~
+    - email: used for email notifications
+    - referrer: overriding the referrer header value
+    - next: url for redirecting
+    - <name>~: for error messages
     """
 
     # Referrer
@@ -87,26 +89,23 @@ def handle_post(request, endpoint):
     ip_address = request.remote_addr if request.remote_addr != '127.0.0.1' \
         else request.headers.get('X-Forwarded-For')
 
-    post = Post(
+    submission = Submission(
         data=dict(data),
-        organization_id=endpoint.organization.id,
         endpoint_id=endpoint.id,
         referrer=request.headers.get('REFERER'),
         user_agent=request.args.get('USER-AGENT'),
         ip_address=ip_address,
     )
-    db.session.add(post)
+    db.session.add(submission)
     db.session.commit()
 
-    from formendpoint.tasks import process_post
-    process_post.delay(post.id)
+    from formendpoint.tasks import process_submission
+    process_submission.delay(submission.id)
 
     if 'redirect' in request.args:
         return redirect(request.args.get('redirect'))
-    elif endpoint.redirect:
-        return redirect(endpoint.redirect)
     else:
-        return redirect(url_for('success', org_name=endpoint.organization.name, _external=True))
+        return redirect(url_for('endpoint', endpoint_id=endpoint.id, _external=True))
 
 
 @login_manager.user_loader
@@ -116,10 +115,17 @@ def load_user(user_id):
 
 @app.route('/')
 def index():
-    url = furl(url_for('organization', org_name='demo', _external=True))
-    url.args['destination'] = DEMO_URL
-    form = render_template('form.html', url=url.url, input='<input type="email" name="email">')
-    return render_template('index.html', form=form, demo_url=DEMO_URL)
+    if current_user.is_authenticated:
+        endpoint = Endpoint.query.filter_by(organization=current_user.organization).first()
+        if endpoint:
+            return redirect(url_for('endpoint', endpoint_id=endpoint.id))
+        return redirect(url_for('create_endpoint'))
+
+    else:
+        url = furl(url_for('organization', org_name='demo', _external=True))
+        url.args['destination'] = DEMO_URL
+        form = render_template('form.html', url=url.url, input='<input type="email" name="email">')
+        return render_template('welcome.html', form=form, demo_url=DEMO_URL)
 
 
 @app.route('/favicon.ico')
@@ -142,6 +148,12 @@ def login(validation_hash):
 def logout():
     logout_user()
     return redirect(url_for('index'))
+
+
+@login_required
+@app.route('/account')
+def account():
+    return "User Account"
 
 ####################
 # Destination Auth #
@@ -183,21 +195,22 @@ def google_auth_finish(destination_type):
     db.session.commit()
     return redirect(url_for('index'))
 
-# #########################
-# # Endpoint Destinations #
-# #########################
+################
+# Destinations #
+################
 
 
 @login_required
-@app.route('/<org_name>/<endpoint_name>/destinations/<destination_type>/new',
-           methods=['GET', 'POST'])
-def create_endpoint_destination(org_name, endpoint_name, destination_type):
-    org = Organization.query.filter_by(name=org_name).first_or_404()
-    endpoint = Endpoint.query.filter_by(organization=org, name=endpoint_name).first_or_404()
+@app.route('/endpoint/<endpoint_id>/destination/new', methods=['GET', 'POST'])
+def create_endpoint_destination(endpoint_id):
+    """
+    :param string destination: destination type
+    """
+    destination_type = request.args.get('destination')
     cls = Destination.dash_to_class(destination_type)
 
     if request.method == 'POST':
-        kwargs = {'endpoint': endpoint}
+        kwargs = {'organization': current_user.organization}
         if cls == GoogleSheet:
             kwargs['spreadsheet_id'] = request.form['spreadsheet_id']
         elif cls == Gmail:
@@ -209,7 +222,7 @@ def create_endpoint_destination(org_name, endpoint_name, destination_type):
         ed = dest.create_endpoint_destination(**kwargs)
         db.session.add(ed)
         db.session.commit()
-        return redirect(url_for('endpoint', org_name=org_name, endpoint_name=endpoint_name))
+        return redirect(url_for('endpoint', endpoint_id=endpoint.id))
 
     if issubclass(cls, PersonalDestinationMixin):
         inst = cls.query.filter_by(user_id=current_user.id).first()
@@ -218,7 +231,7 @@ def create_endpoint_destination(org_name, endpoint_name, destination_type):
                                    google_picker_api_key=GOOGLE_PICKER_API_KEY,
                                    google_client_id=GOOGLE_CLIENT_ID,
                                    google_app_id=GOOGLE_APP_ID,
-                                   form=inst.get_form(org))
+                                   form=inst.get_form(current_user.organization))
 
         return redirect(url_for('google_auth_start', destination_type=destination_type))
 
@@ -226,77 +239,49 @@ def create_endpoint_destination(org_name, endpoint_name, destination_type):
         # TODO: add for non-personal destinations
         raise NotImplemented
 
-    return redirect(url_for('endpoint', org_name=org_name, endpoint_name=endpoint_name))
+    return redirect(url_for('endpoint', endpoint_id=endpoint_id))
 
-# #############
-# # Endpoints #
-# #############
+############
+# Endpoint #
+############
 
 
 @csrf.exempt
-@app.route('/<org_name>/<endpoint_name>', methods=['GET', 'POST'])
-def endpoint(org_name, endpoint_name):
-    org = Organization.query.filter_by(name=org_name).first_or_404()
-    endpoint = Endpoint.query.filter_by(organization=org, name=endpoint_name).first_or_404()
-
-    if request.args.get('destination') in [d.dashname for d in Destination.__subclasses__()]:
-        return redirect(url_for('create_endpoint_destination', org_name=org_name,
-                                endpoint_name=endpoint_name,
-                                destination_type=request.args.get('destination')))
+@app.route('/<endpoint_id>', methods=['GET', 'POST'])
+def endpoint(endpoint_id):
+    endpoint = Endpoint.query.filter_by(id=endpoint_id).first()
 
     if request.method == 'POST':
-        return handle_post(request, endpoint)
-
-    endpoint_destinations = EndpointDestination.query.filter_by(endpoint_id=endpoint.id).all()
-    return render_template('endpoint.html', endpoint=endpoint,
-                           endpoint_destinations=endpoint_destinations,
-                           destination_types={c.dashname: c.human_name
-                                              for c in Destination.__subclasses__()})
-
-
-@csrf.exempt
-@app.route('/e/<uuid>', methods=['POST'])
-def secret_endpoint(uuid):
-    endpoint = Endpoint.query.filter_by(uuid=uuid).first_or_404()
-    return handle_post(request, endpoint)
+        if endpoint:
+            return handle_submission(request, endpoint)
+        elif current_user.is_authenticated:
+            return "You need to create an endpoint."
+        abort(404)
+    return render_template('endpoint.html', current_endpoint=endpoint)
 
 
 @login_required
-@app.route('/<org_name>/endpoints/new', methods=['GET', 'POST'])
-def create_endpoint(org_name):
-    form = EndpointForm(request.form)
+@app.route('/endpoint/new', methods=['GET', 'POST'])
+def create_endpoint():
+    form = EndpointForm()
     if form.validate_on_submit():
-        org = Organization.query.filter(
-            (Organization.name == org_name) &
-            Organization.id.in_(
-                db.session.query(OrganizationMember.organization_id).filter_by(
-                    user_id=current_user.id
-                )
-            )
-        ).first_or_404()
-        e = Endpoint(secret=form.secret.data, name=form.name.data, organization_id=org.id)
-        db.session.add(e)
+        endpoint = Endpoint(name=form.name.data, organization=current_user.organization)
+        db.session.add(endpoint)
         db.session.commit()
-
-        return redirect(url_for('organization', org_name=org.name))
+        return redirect(url_for('endpoint', endpoint_id=endpoint.id))
 
     return render_template('create_endpoint.html', form=form)
 
-
-@app.route('/<org_name>', methods=['GET', 'POST'])
-def organization(org_name):
-    """
-    Args:
-        destination: google sheet, webhook, form name
-    """
-    org = Organization.query.filter_by(name=org_name).first_or_404()
-    form = render_template('form.html', url=url_for('organization', org_name=org.name,
-                           _external=True))
-    return render_template('organization.html', org=org, form=form)
+##############
+# Submission #
+##############
 
 
-@app.route('/<org_name>/success')
-def success(org_name):
-    if current_user.is_authenticated:
-        return "Setup your form to redirect anywhere with the next parameter."
-    return "Success!"
+@login_required
+@app.route('/<submission_id>/delete', methods=['POST'])
+def delete_submission(submission_id):
+    submission = Submission.query.get(submission_id)
+    endpoint_id = submission.endpoint_id
+    db.session.delete(submission)
+    db.session.commit()
+    return redirect(url_for('endpoint', endpoint_id=endpoint_id))

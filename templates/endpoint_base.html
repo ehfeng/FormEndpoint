@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block main %}
+<div class="sidebar">
+  {% include 'sidebar.html' %}
+</div>
+<div class="content">
+  <div class="content-header">
+    <div class="search-box">
+      <form>
+        <input type="search" name="search" placeholder="Search...">
+      </form>
+    </div>
+    <div class="account">
+      <a href="{{ url_for('account') }}">Account</a>
+    </div>
+  </div>
+
+  <div class="content">
+    {% block content %}{% endblock %}
+  </div>
+</div>
+{% endblock %}

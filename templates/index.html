@@ -2,32 +2,4 @@
 
 {% block content %}
 
-<h1>FormEndpoint</h1>
-<div>
-{% if current_user.is_authenticated %}
-    <div><a href="{{ url_for('organization', org_name=current_user.personal_organization.name) }}">{{ current_user.personal_organization.name }}</a></div>
-{% else %}
-    <br>
-    <div>POST forms to Google Sheets with no backend code.</div>
-    <h2>Setup</h2>
-    <h3>1. Point your form at FormEndpoint</h3>
-    <pre>
-{{ form }}
-    </pre>
-    <h3>2. Submit an email</h3>
-    {{ form | safe }}
-    <h3>3. View it in the <a href="{{ demo_url }}">Google Sheet</a>.</h3>
-    <br>
-    <h3>Waitlist Signup</h3>
-    <div>Hi, this is (obviously) very much under construction. If you're interested in playing around with it, let me know below, and I can create an account for you.</div>
-    <br>
-    <form method="POST" action="https://formendpoint.com/ehfeng?destination=https://docs.google.com/spreadsheets/d/1h1Z8u35P2UnFQoFJ7c_CO34ti3QzMQrBrPHh-5jkIUU/">
-        <input type="email" name="email">
-        <button type="submit">Submit</button>
-    </form>
-    <br>
-    <div>Made by <a href="http://ehfeng.com">Eric</a>. Open source on <a href="https://github.com/ehfeng/FormEndpoint">GitHub</a></div>
-{% endif %}
-</div>
-
 {% endblock %}

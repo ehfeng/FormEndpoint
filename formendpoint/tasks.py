@@ -2,7 +2,7 @@ from celery import Celery
 
 from app import app
 from formendpoint.models import (
-    Post,
+    Submission,
 )
 
 
@@ -26,12 +26,9 @@ celery = make_celery(app)
 
 
 @celery.task()
-def process_post(post_id):
-    """
-    Send data to orphan or endpoint destinations.
-    """
-    post = Post.query.get(post_id)
-    post.process()
+def process_submission(submission_id):
+    submission = Submission.query.get(submission_id)
+    submission.process()
 
 
 # @celery.task()

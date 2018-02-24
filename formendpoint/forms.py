@@ -1,10 +1,9 @@
 from flask_wtf import FlaskForm
-from wtforms import BooleanField, SelectField, StringField, TextAreaField, validators
+from wtforms import SelectField, StringField, TextAreaField, validators
 
 
 class EndpointForm(FlaskForm):
-    name = StringField('name', validators=[validators.DataRequired()])
-    secret = BooleanField('secret', default=False)
+    name = StringField('Endpoint Name', validators=[validators.DataRequired()])
 
 
 class GoogleSheetForm(FlaskForm):

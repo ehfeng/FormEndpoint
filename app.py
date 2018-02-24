@@ -16,7 +16,9 @@ app.config['PREFERRED_URL_SCHEME'] = os.environ['PREFERRED_URL_SCHEME']
 app.config['CELERY_RESULT_BACKEND'] = os.environ['REDIS_URL']
 app.config['CELERY_BROKER_URL'] = os.environ['REDIS_URL']
 app.config['GOOGLE_PICKER_API_KEY'] = os.environ['GOOGLE_PICKER_API_KEY']
+app.config['WEBPACK_MANIFEST_PATH'] = 'static/build/manifest.json'
 app.secret_key = os.environ['FLASK_SECRET_KEY']
+
 
 sentry = Sentry(app)
 register_logger_signal(sentry.client)

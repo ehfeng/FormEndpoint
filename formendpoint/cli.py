@@ -2,20 +2,18 @@ from flask import url_for
 import click
 
 from app import app
-from formendpoint.models import db, Organization, OrganizationMember, User
+from formendpoint.models import db, Organization, User
 
 
 @app.cli.command()
 @click.option('--email', prompt="Email")
-@click.option('--orgname', prompt="orgname")
-def createuser(email, orgname):
-    org = Organization(name=orgname, personal=True)
+@click.option('--name', prompt="Organization Name")
+def createuser(email, name):
+    org = Organization(name=name)
     db.session.add(org)
     db.session.commit()
-    user = User(email=email, personal_organization_id=org.id)
-    om = OrganizationMember(organization=org, user=user, owner=True)
+    user = User(email=email, organization_id=org.id, role='owner')
     db.session.add(user)
-    db.session.add(om)
     db.session.commit()
 
 

@@ -1,0 +1,37 @@
+<form autocomplete="off">
+  <select id="endpoint-selector">
+    {% for endpoint in current_user.organization.endpoints %}
+      <option value="{{ endpoint.id }}"{% if current_endpoint is not none and current_endpoint == endpoint %} selected{% endif %}>
+        {{ endpoint.name }}
+      </option>
+      <option value="">New Endpoint</option>
+    {% endfor %}
+  </select>
+</form>
+<br>
+<br>
+
+<div class="section">
+  <div>Submissions</div>
+  <div class="subsection">
+    <div>Redirects</div>
+    <div>Validate</div>
+    <div>Spam</div>
+  </div>
+</div>
+<div class="section">
+  <div>Destinations</div>
+  <div class="subsection">
+    <div>Unsubscribers</div>
+  </div>
+</div>
+
+<script type="text/javascript">
+  $('#endpoint-selector').change((e) => {
+    if (e.target.value) {
+      window.location.pathname = '/' + e.target.value;
+    } else {
+      window.location.pathname = '{{ url_for('create_endpoint')}}';
+    }
+  })
+</script>

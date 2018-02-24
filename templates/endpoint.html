@@ -1,40 +1,81 @@
-{% extends 'base.html' %}
+{% extends 'endpoint_base.html' %}
 
 {% block content %}
 
-<div>Secret URL: {{ url_for('secret_endpoint', uuid=endpoint.uuid, _external=True) }}</div>
 <br>
 <h3>Current Destinations</h3>
-{% for endpoint_destination in endpoint_destinations %}
-	<div>{{ endpoint_destination.type }}</div>
+{% for endpoint_destination in current_endpoint.endpoint_destinations %}
+    <div>{{ endpoint_destination.type }}</div>
 {% endfor %}
 <h3>Add a destination</h3>
-<form method="GET" action="">
-	<select name="destination">
-		{% for destination_type in destination_types %}
-		<option value="{{ destination_type }}">{{ destination_types[destination_type] }}</option>
-		{% endfor %}
-	</select>
-	<button>Submit</button>
-</form>
-<br>
-<h3>Existing Destinations</h3>
-{% for endpoint_destination in endpoint.endpoint_destinations %}
-<div>{{ endpoint_destination.destination.human_name }}</div>
-{% endfor %}
-<br>
-<h3>Submit new data</h3>
-<form method="POST" action="{{ url_for('secret_endpoint', uuid=endpoint.uuid) }}?redirect={{ url_for('endpoint', org_name=endpoint.organization.name, endpoint_name=endpoint.name, _external=True) }}">
-	<input type="email" name="email" autofocus="">
-	<input type="text" name="name">
-	<input type="text" name="zip">
-	<input type="submit" value="Submit Test Data">
-</form>
-<br>
-{% for post in endpoint.posts | sort(attribute='created', reverse=True) %}
-<div><code>{{ post.uuid }}</code></div>
-<div>{{ post.created }}</div>
-<pre>{{ post.data }}</pre>
-{% endfor %}
 
+<form method="GET" action="">
+  <select name="destination">
+    {% for destination_type in destination_types %}
+      <option value="{{ destination_type }}">{{ destination_types[destination_type] }}</option>
+    {% endfor %}
+  </select>
+  <button>Submit</button>
+</form>
+<br>
+
+<h3>Existing Destinations</h3>
+{% for endpoint_destination in current_endpoint.endpoint_destinations %}
+  <div>{{ endpoint_destination.destination.human_name }}</div>
+{% endfor %}
+<br>
+
+<h3>Submit Test Data</h3>
+
+<h4>Edit Sample HTML</h4>
+<textarea class="code-input" rows="10" cols="50">
+<form method="POST" action="{{ url_for('endpoint', endpoint_id=current_endpoint.id, _external=True) }}">
+  <label>Email</label>
+  <input type="email" name="email" autofocus="">
+
+  <label>Name</label>
+  <input type="text" name="name">
+
+  <button>Submit</button>
+</form>
+</textarea>
+<br><br>
+<h4>Submit Form</h4>
+<div class="code-output"></div>
+<br>
+<br>
+<script type="text/javascript">
+  $('.code-output').html($('.code-input').val());
+
+  $('.code-input').on('keyup', (e) => {
+    $('.code-output').html($('.code-input').val());
+  })
+</script>
+<div class="endpoint-submissions">
+  <table>
+    <tr>
+      <th></th>
+      <th>id</th>
+      <th>datetime</th>
+      {% for fieldname in current_endpoint.get_fieldnames() %}
+      <th>{{ fieldname }}</th>
+      {% endfor %}
+    </tr>
+    {% for submission in current_endpoint.submissions | sort(attribute='created', reverse=True) %}
+    <tr>
+      <td>
+        <form method="POST" action="{{ url_for('delete_submission', submission_id=submission.id) }}">
+          <button>x</button>
+          <input name=_csrf_token type=hidden value="{{ csrf_token() }}">
+        </form>
+      </td>
+      <td><code>{{ submission.uuid }}</code></td>
+      <td>{{ submission.created }}</td>
+      {% for _ in submission.data %}
+        <td><code>{{ submission.data[current_endpoint.get_fieldnames()[loop.index0]] }}</code></td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </table>
+</div>
 {% endblock %}
