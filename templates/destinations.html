@@ -1,0 +1,19 @@
+{% extends 'endpoint_base.html' %}
+
+{% block content %}
+
+<form method="GET" action="{{ url_for('create_endpoint_destination', endpoint_id=endpoint.id) }}">
+  <select name="destination">
+    {% for destination_class in destination_classes %}
+    <option value="{{ destination_class.dashname }}">{{ destination_class.human_name }}</option>
+    {% endfor %}
+  </select>
+  <button>Add destination</button>
+</form>
+<br>
+<h3>Existing Destinations</h3>
+{% for ed in endpoint.endpoint_destinations %}
+	<div>{{ ed.destination.human_name }}</div>
+{% endfor %}
+
+{% endblock %}

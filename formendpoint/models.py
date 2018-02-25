@@ -116,7 +116,7 @@ class Endpoint(db.Model):
     created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
     name = db.Column(db.Text)
     redirect = db.Column(db.Text)  # redirect
-    _referrer = db.Column(db.String)  # restict on referrer ORIGIN POSIX regex
+    _referrer = db.Column(db.String)  # restrict on referrer ORIGIN POSIX regex
     strict = db.Column(db.Boolean, default=False)  # Whether non-validated fields are allowed
 
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False)
@@ -305,6 +305,9 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
     def get_form(self, org):
         return GoogleSheetForm()
 
+    def get_sheets(self):
+        self.service.spreadsheets()
+
     @staticmethod
     def convert_to_column_title(num):
         title = ''
@@ -403,10 +406,8 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
             spreadsheetId=spreadsheet_id,
             body={'requests': [{'addSheet': {
                 'properties': {
-                    'title': 'formendpoint.com/%s/%s' % (
-                        endpoint.organization.name, endpoint.name
-                    ),
-                    'tabColor': {'blue': 1, 'red': 1}
+                    'title': endpoint.name,
+                    'tabColor': {'blue': 1}
                 }
             }}]}).execute()
 
@@ -543,6 +544,9 @@ class EndpointDestination(db.Model):
     endpoint_id = db.Column(db.Integer, db.ForeignKey('endpoint.id'), nullable=False)
 
     __repr__ = sane_repr('destination_id', 'organization_id')
+
+    destination = db.relationship('Destination', lazy='select', uselist=False,
+                                  backref=db.backref('endpoint_destination'))
 
     def process(self, post):
         return self.destination.process(post, self)

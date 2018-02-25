@@ -1,7 +1,7 @@
 <form autocomplete="off">
   <select id="endpoint-selector">
-    {% for endpoint in current_user.organization.endpoints %}
-      <option value="{{ endpoint.id }}"{% if current_endpoint is not none and current_endpoint == endpoint %} selected{% endif %}>
+    {% for e in current_user.organization.endpoints %}
+      <option value="{{ e.id }}"{% if  ndpoint == e %} selected{% endif %}>
         {{ endpoint.name }}
       </option>
       <option value="">New Endpoint</option>
@@ -12,18 +12,27 @@
 <br>
 
 <div class="section">
-  <div>Submissions</div>
+  <div>
+    <a class="{% if request.path == url_for('endpoint', endpoint_id=endpoint.id) %}inactive-link{% endif %}" href="{{ url_for('endpoint', endpoint_id=endpoint.id) }}">Home</a>
+  </div>
+
+  <div>
+    <a class="{% if request.path == url_for('submissions', endpoint_id=endpoint.id) %}inactive-link{% endif %}" href="{{ url_for('submissions', endpoint_id=endpoint.id) }}">Submissions</a>
+  </div>
   <div class="subsection">
-    <div>Redirects</div>
-    <div>Validate</div>
     <div>Spam</div>
   </div>
-</div>
-<div class="section">
-  <div>Destinations</div>
+
+  <div>
+    <a class="{% if request.path == url_for('destinations', endpoint_id=endpoint.id) %}inactive-link{% endif %}" href="{{ url_for('destinations', endpoint_id=endpoint.id) }}">Destinations</a>
+  </div>
   <div class="subsection">
     <div>Unsubscribers</div>
   </div>
+
+  <div>Validators</div>
+
+  <div>Support</div>
 </div>
 
 <script type="text/javascript">

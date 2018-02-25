@@ -161,22 +161,25 @@ def account():
 
 
 @login_required
-@app.route('/destinations/<destination_type>/auth-start')
-def google_auth_start(destination_type):
+@app.route('/endpoint/<endpoint_id>/destinations/<destination_type>/auth-start')
+def google_auth_start(endpoint_id, destination_type):
+    """
+    :param string destination: destination type
+    """
     cls = [c for c in GoogleDestinationMixin.__subclasses__()
            if c.dashname == destination_type][0]
     if request.args.get('force') or not current_user.has_destination(cls):
-        redirect_uri = url_for('google_auth_finish', destination_type=destination_type,
-                               _external=True)
+        redirect_uri = url_for('google_auth_finish', endpoint_id=endpoint_id,
+                               destination_type=destination_type, _external=True)
         return redirect(cls.get_flow(redirect_uri=redirect_uri).step1_get_authorize_url())
 
     return redirect(request.args.get('next') or
-                    url_for('organization', org_name=current_user.personal_organization.name))
+                    url_for('create_destination', endpoint_id=endpoint.id))
 
 
 @login_required
-@app.route('/destinations/<destination_type>/auth-finish')
-def google_auth_finish(destination_type):
+@app.route('/endpoint/<endpoint_id>/destinations/<destination_type>/auth-finish')
+def google_auth_finish(endpoint_id, destination_type):
     cls = [c for c in GoogleDestinationMixin.__subclasses__()
            if c.dashname == destination_type][0]
     redirect_uri = url_for('google_auth_finish', destination_type=destination_type, _external=True)
@@ -193,11 +196,21 @@ def google_auth_finish(destination_type):
         db.session.add(inst)
 
     db.session.commit()
-    return redirect(url_for('index'))
+    return redirect(url_for('create_destination', endpoint_id=endpoint_id))
 
 ################
 # Destinations #
 ################
+
+
+@login_required
+@app.route('/endpoint/<endpoint_id>/destinations')
+def destinations(endpoint_id):
+    endpoint = Endpoint.query.get(endpoint_id)
+    destination_classes = [c for c in Destination.__subclasses__()]
+
+    return render_template('destinations.html', endpoint=endpoint,
+                           destination_classes=destination_classes)
 
 
 @login_required
@@ -207,12 +220,13 @@ def create_endpoint_destination(endpoint_id):
     :param string destination: destination type
     """
     destination_type = request.args.get('destination')
+    endpoint = Endpoint.query.get(endpoint_id)
     cls = Destination.dash_to_class(destination_type)
 
     if request.method == 'POST':
-        kwargs = {'organization': current_user.organization}
+        kwargs = {'endpoint': endpoint}
         if cls == GoogleSheet:
-            kwargs['spreadsheet_id'] = request.form['spreadsheet_id']
+            kwargs['spreadsheet_id'] = request.form['file']
         elif cls == Gmail:
             kwargs['sender'] = request.form['sender']
             kwargs['subject'] = request.form['subject']
@@ -222,7 +236,7 @@ def create_endpoint_destination(endpoint_id):
         ed = dest.create_endpoint_destination(**kwargs)
         db.session.add(ed)
         db.session.commit()
-        return redirect(url_for('endpoint', endpoint_id=endpoint.id))
+        return redirect(url_for('destinations', endpoint_id=endpoint.id))
 
     if issubclass(cls, PersonalDestinationMixin):
         inst = cls.query.filter_by(user_id=current_user.id).first()
@@ -233,7 +247,8 @@ def create_endpoint_destination(endpoint_id):
                                    google_app_id=GOOGLE_APP_ID,
                                    form=inst.get_form(current_user.organization))
 
-        return redirect(url_for('google_auth_start', destination_type=destination_type))
+        return redirect(url_for('google_auth_start', endpoint_id=endpoint.id,
+                                destination_type=destination_type))
 
     else:
         # TODO: add for non-personal destinations
@@ -257,7 +272,7 @@ def endpoint(endpoint_id):
         elif current_user.is_authenticated:
             return "You need to create an endpoint."
         abort(404)
-    return render_template('endpoint.html', current_endpoint=endpoint)
+    return render_template('endpoint.html', endpoint=endpoint)
 
 
 @login_required
@@ -275,6 +290,13 @@ def create_endpoint():
 ##############
 # Submission #
 ##############
+
+
+@login_required
+@app.route('/endpoint/<endpoint_id>/submissions')
+def submissions(endpoint_id):
+    endpoint = Endpoint.query.get(endpoint_id)
+    return render_template('submissions.html', endpoint=endpoint)
 
 
 @login_required

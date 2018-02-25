@@ -6,13 +6,14 @@ body {
 .main {
   width: 100%;
   height: 100vh;
+  margin: 0px;
   display: flex;
   flex-direction: row;
   font-family: sans-serif; }
 
 .sidebar {
   width: 200px;
-  height: 100%;
+  height: 500px;
   background-color: #6c757d;
   color: #eaeaea;
   padding: 16px; }
@@ -27,6 +28,16 @@ body {
     font-size: 22px; }
   .sidebar .name {
     font-size: 22px; }
+  .sidebar .section a {
+    text-decoration: none; }
+    .sidebar .section a:link {
+      color: #eaeaea; }
+    .sidebar .section a:visited {
+      color: #eaeaea; }
+    .sidebar .section a.inactive-link {
+      pointer-events: none;
+      cursor: default;
+      font-weight: bold; }
   .sidebar .section div {
     font-size: 20px;
     margin-bottom: 16px; }
@@ -66,6 +77,8 @@ body {
         color: black;
         font-size: 18px;
         text-decoration: none; }
+  .content .section-content {
+    padding-top: 12px; }
   .content .endpoint-submissions td {
     padding: 4px; }
 

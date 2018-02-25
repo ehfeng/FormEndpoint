@@ -1,33 +1,9 @@
 {% extends 'endpoint_base.html' %}
 
 {% block content %}
-<h3>Submit Test Data</h3>
 
-<h4>Edit Sample HTML</h4>
-<textarea class="code-input" rows="10" cols="50">
-<form method="POST" action="{{ url_for('endpoint', endpoint_id=endpoint.id, _external=True) }}">
-  <label>Email</label>
-  <input type="email" name="email" autofocus="">
+<h1>Submissions</h1>
 
-  <label>Name</label>
-  <input type="text" name="name">
-
-  <button>Submit</button>
-</form>
-</textarea>
-<br><br>
-
-<h4>Submit Form</h4>
-<div class="code-output"></div>
-<br>
-<br>
-<script type="text/javascript">
-  $('.code-output').html($('.code-input').val());
-
-  $('.code-input').on('keyup', (e) => {
-    $('.code-output').html($('.code-input').val());
-  })
-</script>
 <div class="endpoint-submissions">
   <table>
     <tr>
