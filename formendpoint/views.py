@@ -122,7 +122,7 @@ def index():
         return redirect(url_for('create_endpoint'))
 
     else:
-        url = furl(url_for('organization', org_name='demo', _external=True))
+        url = furl(url_for('endpoint', endpoint_id=1, _external=True))
         url.args['destination'] = DEMO_URL
         form = render_template('form.html', url=url.url, input='<input type="email" name="email">')
         return render_template('welcome.html', form=form, demo_url=DEMO_URL)
