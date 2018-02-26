@@ -1,6 +1,7 @@
 from collections import defaultdict
 import datetime
 import os
+import requests
 from urllib.parse import parse_qsl, urlparse
 
 from flask import (
@@ -25,6 +26,7 @@ from formendpoint.forms import EndpointForm
 from formendpoint.models import (
     Destination,
     Endpoint,
+    EndpointDestination,
     Gmail,
     GoogleDestinationMixin,
     GoogleSheet,
@@ -169,34 +171,48 @@ def google_auth_start(endpoint_id, destination_type):
     cls = [c for c in GoogleDestinationMixin.__subclasses__()
            if c.dashname == destination_type][0]
     if request.args.get('force') or not current_user.has_destination(cls):
-        redirect_uri = url_for('google_auth_finish', endpoint_id=endpoint_id,
+        redirect_uri = url_for('google_auth_finish',
                                destination_type=destination_type, _external=True)
-        return redirect(cls.get_flow(redirect_uri=redirect_uri).step1_get_authorize_url())
+        flow = cls.get_flow(redirect_uri=redirect_uri)
+        flow.params['state'] = endpoint_id
+        return redirect(flow.step1_get_authorize_url())
 
     return redirect(request.args.get('next') or
-                    url_for('create_destination', endpoint_id=endpoint.id))
+                    url_for('create_endpoint_destination', endpoint_id=endpoint.id,
+                            destination=destination_type))
 
 
 @login_required
-@app.route('/endpoint/<endpoint_id>/destinations/<destination_type>/auth-finish')
-def google_auth_finish(endpoint_id, destination_type):
+@app.route('/destinations/<destination_type>/auth-finish')
+def google_auth_finish(destination_type):
     cls = [c for c in GoogleDestinationMixin.__subclasses__()
            if c.dashname == destination_type][0]
     redirect_uri = url_for('google_auth_finish', destination_type=destination_type, _external=True)
     credentials = cls.get_flow(redirect_uri=redirect_uri).step2_exchange(request.args.get('code'))
+
+    if cls == Gmail:
+        r = requests.get('https://www.googleapis.com/plus/v1/people/me',
+                         headers={'Authorization': 'Bearer {}'.format(credentials.access_token)})
+        email = r.json()['emails'][0]['value']
+
     inst = cls.query.filter_by(user=current_user).first()
+
     if inst:
         inst.credentials_json = credentials.to_json()
+        inst.email = email
         db.session.add(inst)
     else:
         inst = cls(
             user_id=current_user.id,
-            credentials_json=credentials.to_json()
+            credentials_json=credentials.to_json(),
+            email=email,
         )
         db.session.add(inst)
 
     db.session.commit()
-    return redirect(url_for('create_destination', endpoint_id=endpoint_id))
+    return redirect(url_for('create_endpoint_destination',
+                            endpoint_id=int(request.args.get('state')),
+                            destination=destination_type))
 
 ################
 # Destinations #
@@ -255,6 +271,15 @@ def create_endpoint_destination(endpoint_id):
         raise NotImplemented
 
     return redirect(url_for('endpoint', endpoint_id=endpoint_id))
+
+
+@login_required
+@app.route('/endpoint/<endpoint_id>/destination/<endpoint_destination_id>/delete', methods=['POST'])
+def delete_endpoint_destination(endpoint_id, endpoint_destination_id):
+    ed = EndpointDestination.query.get(endpoint_destination_id)
+    db.session.delete(ed)
+    db.session.commit()
+    return redirect(url_for('endpoint_destination', endpoint_id=endpoint_id))
 
 ############
 # Endpoint #

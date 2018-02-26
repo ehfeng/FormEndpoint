@@ -1,7 +1,8 @@
-{% extends 'base.html' %}
+{% extends 'create_base.html' %}
 {% from "_formhelpers.html" import render_field %}
 
-{% block main %}
+{% block content %}
+<h1>Create Endpoint</h1>
 <form method=post>
   <dl>
   	{{ form.csrf_token }}

@@ -488,9 +488,10 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
 
 
 class Gmail(Destination, PersonalDestinationMixin, GoogleDestinationMixin):
-    scope = 'https://www.googleapis.com/auth/gmail.send'
+    scope = 'https://www.googleapis.com/auth/gmail.send email'
 
     id = db.Column(db.Integer, db.ForeignKey('destination.id'), primary_key=True)
+    email = db.Column(db.Text)
 
     @classproperty
     def human_name(cls):
@@ -504,8 +505,9 @@ class Gmail(Destination, PersonalDestinationMixin, GoogleDestinationMixin):
 
     def get_form(self, org):
         # TODO
-        choices = [(email, email) for email, in User.query.filter(User.verified and
-                   User.id.in_()).with_entities(User.email).all()]
+        choices = [(email, email) for email, in Gmail.query.filter(Gmail.user_id.in_(
+            [u.id for u in org.users])).with_entities(Gmail.email).all()]
+
         return GmailForm(choices)
 
     def create_template(self, sender, subject, body):

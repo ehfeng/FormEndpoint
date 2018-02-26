@@ -23,4 +23,4 @@
 `source .env`
 `flask run`
 `watchmedo shell-command --patterns="*.py" --recursive --command='pkill -f celery; celery -A formendpoint.tasks.celery worker'`
-`sass --watch static/main.scss:static/main.css`
+`sass --watch static/styles/main.scss:static/build/main.css`

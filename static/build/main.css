@@ -10,6 +10,13 @@ body {
   display: flex;
   flex-direction: row;
   font-family: sans-serif; }
+  .main .form-content {
+    padding: 30px;
+    margin-top: 80px;
+    margin-bottom: 80px;
+    margin-left: auto;
+    margin-right: auto;
+    background-color: white; }
 
 .sidebar {
   width: 200px;

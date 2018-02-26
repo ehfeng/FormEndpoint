@@ -13,8 +13,13 @@ class GoogleSheetForm(FlaskForm):
 
 class GmailForm(FlaskForm):
     sender = SelectField('From')
-    subject = StringField('subject')
-    body = TextAreaField('Email template', validators=[validators.DataRequired()])
+    subject = StringField('Subject')
+    body = TextAreaField('Template', validators=[validators.DataRequired()], render_kw={
+        'placeholder': 'Template will be rendered with Jinja.',
+        'cols': 40,
+        'rows': 16,
+    })
+    backfill = BooleanField()
 
     def __init__(self, choices):
         super().__init__()
