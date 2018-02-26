@@ -190,24 +190,22 @@ def google_auth_finish(destination_type):
     redirect_uri = url_for('google_auth_finish', destination_type=destination_type, _external=True)
     credentials = cls.get_flow(redirect_uri=redirect_uri).step2_exchange(request.args.get('code'))
 
-    if cls == Gmail:
-        r = requests.get('https://www.googleapis.com/plus/v1/people/me',
-                         headers={'Authorization': 'Bearer {}'.format(credentials.access_token)})
-        email = r.json()['emails'][0]['value']
-
     inst = cls.query.filter_by(user=current_user).first()
 
     if inst:
         inst.credentials_json = credentials.to_json()
-        inst.email = email
         db.session.add(inst)
     else:
         inst = cls(
             user_id=current_user.id,
             credentials_json=credentials.to_json(),
-            email=email,
         )
         db.session.add(inst)
+
+    if cls == Gmail:
+        r = requests.get('https://www.googleapis.com/plus/v1/people/me',
+                         headers={'Authorization': 'Bearer {}'.format(credentials.access_token)})
+        inst.email = r.json()['emails'][0]['value']
 
     db.session.commit()
     return redirect(url_for('create_endpoint_destination',
