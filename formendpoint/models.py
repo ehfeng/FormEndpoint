@@ -2,16 +2,18 @@ import base64
 from collections import UserList
 from copy import deepcopy
 import datetime
+from email.message import EmailMessage
 from email.mime.text import MIMEText
 import httplib2
 import inflection
 import os
 import re
+import smtplib
 import string
 import uuid
 
 from apiclient import discovery
-from flask import abort
+from flask import abort, url_for
 from flask_login import UserMixin
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
@@ -89,7 +91,7 @@ class User(db.Model, UserMixin):
     created = db.Column(db.DateTime, server_default=func.now(), nullable=False)
     email = db.Column(db.Text, unique=True, nullable=False)
     name = db.Column(db.Text)
-    role = db.Column(db.Text)  # owner, member
+    role = db.Column(db.Text, default='owner')  # owner, member
 
     verified = db.Column(db.Boolean, default=False)
     validation_hash = db.Column(db.Text)
@@ -109,6 +111,18 @@ class User(db.Model, UserMixin):
 
         pd = cls.query.filter_by(user_id=self.id).first()
         return self.is_authenticated and pd and pd.credentials and pd.credentials.refresh_token
+
+    def send_confirmation_email(self):
+        msg = EmailMessage()
+        msg.set_content('Click here to confirm your email address: {}'.format(url_for(
+            'login_with_validation', validation_hash=self.validation_hash, _external=True)))
+        msg['Subject'] = 'Login to FormEndpoint'
+        msg['From'] = 'support@formendpoint.com'
+        msg['To'] = self.email
+        s = smtplib.SMTP(os.environ['SMTP_SERVER'])
+        s.login(os.environ['SMTP_USERNAME'], os.environ['SMTP_PASSWORD'])
+        s.send_message(msg)
+        s.quit()
 
 
 class Endpoint(db.Model):

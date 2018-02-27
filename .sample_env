@@ -7,7 +7,12 @@ export DATABASE_URL=
 export RABBITMQ_URL=
 export REDIS_URL=
 
+export GOOGLE_APP_ID=
 export GOOGLE_CLIENT_ID=
 export GOOGLE_CLIENT_SECRET=
-export GOOGLE_APP_ID=
 export GOOGLE_PICKER_API_KEY=
+
+export SENTRY_ORG=
+export SENTRY_AUTH_TOKEN=
+
+export SMTP_SERVER=

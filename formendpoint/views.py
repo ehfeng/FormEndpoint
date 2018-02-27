@@ -115,6 +115,9 @@ def load_user(user_id):
     return User.query.get(user_id)
 
 
+login_manager.login_view = "app.login"
+
+
 @app.route('/')
 def index():
     if current_user.is_authenticated:
@@ -136,8 +139,26 @@ def favicon():
                                mimetype='image/vnd.microsoft.icon')
 
 
+@app.route('/login', methods=['POST'])
+def login():
+    user = User.query.first()
+    if not user:
+        user = User(email=request.form['email'])
+    user.refresh_validation_hash()
+    db.session.add(user)
+    db.session.commit()
+
+    user.send_confirmation_email()
+    return redirect(url_for('waiting'))
+
+
+@app.route('/waiting')
+def waiting():
+    return 'Check your inbox!'
+
+
 @app.route('/login/<validation_hash>')
-def login(validation_hash):
+def login_with_validation(validation_hash):
     user = User.query.filter_by(validation_hash=validation_hash).first()
     if user and user.validation_hash_added and user.validation_hash_added > \
             datetime.datetime.now() - datetime.timedelta(hours=4):
