@@ -141,7 +141,7 @@ def favicon():
 
 @app.route('/login', methods=['POST'])
 def login():
-    user = User.query.first()
+    user = User.query.filter_by(email=request.form['email']).first()
     if not user:
         user = User(email=request.form['email'])
     user.refresh_validation_hash()
