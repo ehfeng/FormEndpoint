@@ -83,9 +83,9 @@ def handle_submission(request, endpoint):
         if isinstance(data[k], list) and len(data[k]) == 1:
             data[k] = data[k][0]
 
-    # remove `redirect`
+    # remove `next`
     try:
-        del data['redirect']
+        del data['next']
     except KeyError:
         pass
 
@@ -105,8 +105,8 @@ def handle_submission(request, endpoint):
     from formendpoint.tasks import process_submission
     process_submission.delay(submission.id)
 
-    if 'redirect' in request.args:
-        return redirect(request.args.get('redirect'))
+    if 'next' in request.args:
+        return redirect(request.args.get('next'))
     else:
         return redirect(url_for('endpoint', endpoint_id=endpoint.id, _external=True))
 
