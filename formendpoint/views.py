@@ -181,6 +181,12 @@ def logout():
 def account():
     return "User Account"
 
+
+@login_required
+@app.route('/support')
+def support():
+    return render_template('support.html')
+
 ####################
 # Destination Auth #
 ####################
