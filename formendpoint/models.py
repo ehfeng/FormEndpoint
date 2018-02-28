@@ -96,7 +96,7 @@ class User(db.Model, UserMixin):
     verified = db.Column(db.Boolean, default=False)
     validation_hash = db.Column(db.Text)
     validation_hash_added = db.Column(db.DateTime)
-    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'))
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False)
 
     organization = db.relationship('Organization', lazy='select', backref=db.backref('users'))
 

@@ -30,6 +30,7 @@ from formendpoint.models import (
     Gmail,
     GoogleDestinationMixin,
     GoogleSheet,
+    Organization,
     PersonalDestinationMixin,
     Submission,
     User,
@@ -143,7 +144,9 @@ def favicon():
 def login():
     user = User.query.filter_by(email=request.form['email']).first()
     if not user:
-        user = User(email=request.form['email'])
+        org = Organization()
+        user = User(email=request.form['email'], organization=org)
+
     user.refresh_validation_hash()
     db.session.add(user)
     db.session.commit()
