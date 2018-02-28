@@ -32,7 +32,9 @@
 
   <div>Validators</div>
 
-  <div>Support</div>
+  <div>
+    <a class="{% if request.path == url_for('support') %}inactive-link{% endif %}" href="{{ url_for('support') }}">Support</a>
+  </div>
 </div>
 
 <script type="text/javascript">
