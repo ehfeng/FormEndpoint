@@ -11,8 +11,8 @@ from raven.contrib.celery import register_logger_signal, register_signal
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# app.config['SERVER_NAME'] = os.environ['SERVER_NAME']
-# app.config['PREFERRED_URL_SCHEME'] = os.environ['PREFERRED_URL_SCHEME']
+app.config['SERVER_NAME'] = os.environ['SERVER_NAME']
+app.config['PREFERRED_URL_SCHEME'] = os.environ['PREFERRED_URL_SCHEME']
 app.config['CELERY_RESULT_BACKEND'] = os.environ['REDIS_URL']
 app.config['CELERY_BROKER_URL'] = os.environ['REDIS_URL']
 app.config['GOOGLE_PICKER_API_KEY'] = os.environ['GOOGLE_PICKER_API_KEY']
