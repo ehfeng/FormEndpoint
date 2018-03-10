@@ -413,3 +413,8 @@ def delete_submission(submission_id):
     db.session.delete(submission)
     db.session.commit()
     return redirect(url_for('endpoint', endpoint_id=endpoint_id))
+
+
+@app.route('/privacy')
+def privacy():
+    return render_template('privacy.html')
