@@ -1,5 +1,11 @@
 from flask_wtf import FlaskForm
 from wtforms import BooleanField, HiddenField, SelectField, StringField, TextAreaField, validators
+from wtforms.fields.html5 import EmailField
+
+
+class LoginForm(FlaskForm):
+    email = EmailField('Email', validators=[validators.DataRequired('Email required.'),
+                                            validators.Email('You must enter a valid email.')])
 
 
 class EndpointForm(FlaskForm):

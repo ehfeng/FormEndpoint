@@ -9,8 +9,8 @@
 		<div>You design the form. We'll do the rest.</div>
 		<br>
 		<div>
-			<form action="/login" method="POST">
-				<input autofocus type="email" name="email" placeholder="Your email">
+			<form method="POST">
+				{{ login_form.email }}
 				<input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
 				<button>Get Started</button>
 			</form>

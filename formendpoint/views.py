@@ -24,7 +24,7 @@ from furl import furl
 
 from app import app, csrf, login_manager
 
-from formendpoint.forms import EndpointForm
+from formendpoint.forms import EndpointForm, LoginForm
 from formendpoint.models import (
     Destination,
     Endpoint,
@@ -52,74 +52,62 @@ def load_user(user_id):
     return User.query.get(user_id)
 
 
-login_manager.login_view = "app.login"
+login_manager.login_view = "app.index"
 
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
     if current_user.is_authenticated:
-        endpoint = Endpoint.query.filter_by(organization=current_user.organization).first()
-        if endpoint:
-            return redirect(url_for('endpoint', endpoint_id=endpoint.id))
-        return redirect(url_for('create_endpoint'))
+        if request.method == 'GET':
+            endpoint = Endpoint.query.filter_by(organization=current_user.organization).first()
+            if endpoint:
+                return redirect(url_for('endpoint', endpoint_id=endpoint.id))
+            return redirect(url_for('create_endpoint'))
+        else:
+            abort(405)
 
     else:
         url = furl(url_for('endpoint', endpoint_id=1, _external=True))
         url.args['destination'] = DEMO_URL
-        form = render_template('form.html', url=url.url, input='<input type="email" name="email">')
-        return render_template('welcome.html', form=form, demo_url=DEMO_URL)
+        demo_form = render_template('form.html', url=url.url,
+                                    input='<input type="email" name="email">')
+        login_form = LoginForm()
 
+        if login_form.validate_on_submit():
+            user = User.query.filter_by(email=request.form['email']).first()
+            if not user:
+                org = Organization()
+                user = User(email=request.form['email'], organization=org)
 
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico',
-                               mimetype='image/vnd.microsoft.icon')
+            user.refresh_validation_hash()
+            db.session.add(user)
+            db.session.commit()
 
+            user.send_confirmation_email()
+            return 'Check your inbox!'
 
-@app.route('/login', methods=['POST'])
-def login():
-    user = User.query.filter_by(email=request.form['email']).first()
-    if not user:
-        org = Organization()
-        user = User(email=request.form['email'], organization=org)
-
-    user.refresh_validation_hash()
-    db.session.add(user)
-    db.session.commit()
-
-    user.send_confirmation_email()
-    return redirect(url_for('waiting'))
-
-
-@app.route('/waiting')
-def waiting():
-    return 'Check your inbox!'
+        return render_template('welcome.html', login_form=login_form,
+                               demo_form=demo_form, demo_url=DEMO_URL)
 
 
 @app.route('/login/<validation_hash>')
 def login_with_validation(validation_hash):
-    user = User.query.filter_by(validation_hash=validation_hash).first()
+    user = User.query.filter_by(validation_hash=validation_hash).first_or_404()
     if user and user.validation_hash_added and user.validation_hash_added > \
             datetime.datetime.now() - datetime.timedelta(hours=4):
         login_user(user)
     return redirect(url_for('index'))
 
 
-@login_required
 @app.route('/logout')
+@login_required
 def logout():
     logout_user()
     return redirect(url_for('index'))
 
 
-@login_required
-@app.route('/account')
-def account():
-    return "User Account"
-
-
-@login_required
 @app.route('/support')
+@login_required
 def support():
     return render_template('support.html')
 
@@ -128,8 +116,8 @@ def support():
 ####################
 
 
-@login_required
 @app.route('/endpoint/<endpoint_id>/destinations/<destination_type>/auth-start')
+@login_required
 def google_auth_start(endpoint_id, destination_type):
     """
     :param string destination: destination type
@@ -148,8 +136,8 @@ def google_auth_start(endpoint_id, destination_type):
                             destination=destination_type))
 
 
-@login_required
 @app.route('/destinations/<destination_type>/auth-finish')
+@login_required
 def google_auth_finish(destination_type):
     cls = [c for c in GoogleDestinationMixin.__subclasses__()
            if c.dashname == destination_type][0]
@@ -183,8 +171,8 @@ def google_auth_finish(destination_type):
 ################
 
 
-@login_required
 @app.route('/endpoint/<endpoint_id>/destinations')
+@login_required
 def destinations(endpoint_id):
     endpoint = Endpoint.query.get(endpoint_id)
     destination_classes = [c for c in Destination.__subclasses__()]
@@ -193,8 +181,8 @@ def destinations(endpoint_id):
                            destination_classes=destination_classes)
 
 
-@login_required
 @app.route('/endpoint/<endpoint_id>/destination/new', methods=['GET', 'POST'])
+@login_required
 def create_endpoint_destination(endpoint_id):
     """
     :param string destination: destination type
@@ -237,21 +225,53 @@ def create_endpoint_destination(endpoint_id):
     return redirect(url_for('endpoint', endpoint_id=endpoint_id))
 
 
-@login_required
 @app.route('/endpoint/<endpoint_id>/destination/<endpoint_destination_id>/delete', methods=['POST'])
+@login_required
 def delete_endpoint_destination(endpoint_id, endpoint_destination_id):
     ed = EndpointDestination.query.get(endpoint_destination_id)
     db.session.delete(ed)
     db.session.commit()
     return redirect(url_for('endpoint_destination', endpoint_id=endpoint_id))
 
+##############
+# Submission #
+##############
+
+
+@app.route('/endpoint/<endpoint_id>/submissions')
+@login_required
+def submissions(endpoint_id):
+    endpoint = Endpoint.query.get(endpoint_id)
+    return render_template('submissions.html', endpoint=endpoint)
+
+
+@app.route('/<submission_id>/delete', methods=['POST'])
+@login_required
+def delete_submission(submission_id):
+    submission = Submission.query.get(submission_id)
+    endpoint_id = submission.endpoint_id
+    db.session.delete(submission)
+    db.session.commit()
+    return redirect(url_for('endpoint', endpoint_id=endpoint_id))
+
+
+@app.route('/privacy')
+def privacy():
+    return render_template('privacy.html')
+
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico',
+                               mimetype='image/vnd.microsoft.icon')
+
 ############
 # Endpoint #
 ############
 
 
-@csrf.exempt
 @app.route('/<endpoint_id>', methods=['GET', 'POST'])
+@csrf.exempt
 def endpoint(endpoint_id):
     """
     Data priority:
@@ -270,7 +290,6 @@ def endpoint(endpoint_id):
     - referrer: overrides referrer header
     - <name>~: for error messages
     """
-
     endpoint = Endpoint.query.filter_by(id=endpoint_id).first()
 
     if request.method == 'POST':
@@ -338,7 +357,9 @@ def endpoint(endpoint_id):
             # TODO
             return "This endpoint does not exist."
         abort(404)
-    return render_template('endpoint.html', endpoint=endpoint)
+    if current_user.is_authenticated:
+        return render_template('endpoint.html', endpoint=endpoint)
+    return redirect(url_for('index'))
 
 
 @app.route('/<endpoint_id>/recaptcha', methods=["POST"])
@@ -381,8 +402,8 @@ def endpoint_success(endpoint_id):
     return 'Thanks!'
 
 
-@login_required
 @app.route('/endpoint/new', methods=['GET', 'POST'])
+@login_required
 def create_endpoint():
     form = EndpointForm()
     if form.validate_on_submit():
@@ -392,29 +413,3 @@ def create_endpoint():
         return redirect(url_for('endpoint', endpoint_id=endpoint.id))
 
     return render_template('create_endpoint.html', form=form)
-
-##############
-# Submission #
-##############
-
-
-@login_required
-@app.route('/endpoint/<endpoint_id>/submissions')
-def submissions(endpoint_id):
-    endpoint = Endpoint.query.get(endpoint_id)
-    return render_template('submissions.html', endpoint=endpoint)
-
-
-@login_required
-@app.route('/<submission_id>/delete', methods=['POST'])
-def delete_submission(submission_id):
-    submission = Submission.query.get(submission_id)
-    endpoint_id = submission.endpoint_id
-    db.session.delete(submission)
-    db.session.commit()
-    return redirect(url_for('endpoint', endpoint_id=endpoint_id))
-
-
-@app.route('/privacy')
-def privacy():
-    return render_template('privacy.html')

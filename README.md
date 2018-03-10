@@ -16,8 +16,6 @@
 
 3. Done!
 
-![Example](https://github.com/ehfeng/FormEndpoint/raw/master/static/out.gif)
-
 ## Development
 
 `source .env` (See `.sample_env` for required environment variables)
