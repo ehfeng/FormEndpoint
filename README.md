@@ -20,7 +20,10 @@
 
 ## Development
 
-`source .env`
+`source .env` (See `.sample_env` for required environment variables)
+
 `flask run`
+
 `watchmedo shell-command --patterns="*.py" --recursive --command='pkill -f celery; celery -A formendpoint.tasks.celery worker'`
+
 `sass --watch static/styles/main.scss:static/build/main.css`
