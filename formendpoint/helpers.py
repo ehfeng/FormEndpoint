@@ -23,7 +23,7 @@ def page_not_found(e):
     return render_template('404.html'), 404
 
 
-@app.route('/500')
+@app.route('/error')
 def test_error():
     assert False
 
