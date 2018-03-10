@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title></title>
+<script type="text/javascript">
+	var formData = {{ form_data_json|safe }};
+	var csrf_token = "{{ csrf_token() }}";
+	var onSubmit = (token) => {
+		var xhr = new XMLHttpRequest();
+		xhr.onreadystatechange = function () {
+			if(xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+				window.location = JSON.parse(xhr.responseText);
+			}
+		};
+		xhr.open("POST", "{{ url_for('recaptcha', endpoint_id=endpoint_id) }}?token=" + token);
+		xhr.setRequestHeader("X-CSRFToken", csrf_token);
+		xhr.setRequestHeader("Content-Type", "application/json")
+		xhr.send(JSON.stringify(formData));
+	}
+	var onloadCallback = () => {
+		grecaptcha.render('recaptcha');
+		grecaptcha.execute();
+	}
+</script>
+</head>
+
+<body>
+<div id="recaptcha"
+     class="g-recaptcha"
+     data-sitekey="6LdGoEsUAAAAACRP69UytBMl3FokIt4PvXr7an-5"
+     data-callback="onSubmit"
+     data-size="invisible">
+</div>
+<script src="https://www.google.com/recaptcha/api.js?onload=onloadCallback&render=explicit" async defer></script>
+</body>
+</html>

@@ -132,6 +132,7 @@ class Endpoint(db.Model):
     redirect = db.Column(db.Text)  # redirect
     _referrer = db.Column(db.String)  # restrict on referrer ORIGIN POSIX regex
     strict = db.Column(db.Boolean, default=False)  # Whether non-validated fields are allowed
+    recaptcha = db.Column(db.Boolean, default=True)
 
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False)
 

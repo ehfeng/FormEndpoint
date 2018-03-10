@@ -1,11 +1,13 @@
 from collections import defaultdict
 import datetime
+import json
 import os
 import requests
 from urllib.parse import parse_qsl, urlparse
 
 from flask import (
     abort,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -38,77 +40,11 @@ from formendpoint.models import (
 )
 
 DEMO_URL = 'https://docs.google.com/spreadsheets/d/1QWeHPvZW4atIZxobdVXr3IYl8u4EnV99Dm_K4yGfo_8/'
+SITE_VERIFY_URL = 'https://www.google.com/recaptcha/api/siteverify'
 GOOGLE_PICKER_API_KEY = os.environ['GOOGLE_PICKER_API_KEY']
 GOOGLE_CLIENT_ID = os.environ['GOOGLE_CLIENT_ID']
 GOOGLE_APP_ID = os.environ['GOOGLE_APP_ID']
-
-
-def handle_submission(request, endpoint):
-    """
-    Data priority:
-    1. Form data
-    2. JSON body data
-    3. request query parameters
-    4. referrer query parameters
-
-    Referrer parameters are not necessarily meaningful, but better to store in case.
-    Within form or query params, you can have overlapping names to send lists, but
-    between form, body, or query params, names overwrite.
-
-    Special fields: email, referrer, next, names ending in ~
-    - email: used for email notifications
-    - referrer: overriding the referrer header value
-    - next: url for redirecting
-    - <name>~: for error messages
-    """
-
-    # Referrer
-    data = defaultdict(list)
-    for k, v in parse_qsl(urlparse(request.headers.get('REFERER')).query, keep_blank_values=True):
-        data[k].append(v)
-
-    # Request
-    for arg in request.args:
-        data[arg] = request.args.getlist(arg) or data[arg]
-
-    # Body
-    data.update(request.get_json() or {})
-
-    # Form
-    for field in request.form:
-        data[field] = request.form.getlist(field) or data[field]
-
-    # Flatten single item lists
-    for k in data:
-        if isinstance(data[k], list) and len(data[k]) == 1:
-            data[k] = data[k][0]
-
-    # remove `next`
-    try:
-        del data['next']
-    except KeyError:
-        pass
-
-    ip_address = request.remote_addr if request.remote_addr != '127.0.0.1' \
-        else request.headers.get('X-Forwarded-For')
-
-    submission = Submission(
-        data=dict(data),
-        endpoint_id=endpoint.id,
-        referrer=request.headers.get('REFERER'),
-        user_agent=request.args.get('USER-AGENT'),
-        ip_address=ip_address,
-    )
-    db.session.add(submission)
-    db.session.commit()
-
-    from formendpoint.tasks import process_submission
-    process_submission.delay(submission.id)
-
-    if 'next' in request.args:
-        return redirect(request.args.get('next'))
-    else:
-        return redirect(url_for('endpoint', endpoint_id=endpoint.id, _external=True))
+RECAPTCHA_SECRET_KEY = os.environ['RECAPTCHA_SECRET_KEY']
 
 
 @login_manager.user_loader
@@ -317,15 +253,132 @@ def delete_endpoint_destination(endpoint_id, endpoint_destination_id):
 @csrf.exempt
 @app.route('/<endpoint_id>', methods=['GET', 'POST'])
 def endpoint(endpoint_id):
+    """
+    Data priority:
+    1. Form data
+    2. JSON body data
+    3. request query parameters
+    4. referrer query parameters
+
+    Referrer parameters are not necessarily meaningful, but better to store in case.
+    Within form or query params, you can have overlapping names to send lists, but
+    between form, body, or query params, names overwrite.
+
+    Special fields: email, next, referrer, <input name> ending in ~
+    - email: used for email notifications
+    - next: url for redirecting
+    - referrer: overrides referrer header
+    - <name>~: for error messages
+    """
+
     endpoint = Endpoint.query.filter_by(id=endpoint_id).first()
 
     if request.method == 'POST':
         if endpoint:
-            return handle_submission(request, endpoint)
+            # Referrer
+            data = defaultdict(list)
+            for k, v in parse_qsl(urlparse(request.headers.get('REFERER')).query,
+                                  keep_blank_values=True):
+                data[k].append(v)
+
+            # Request
+            for arg in request.args:
+                data[arg] = request.args.getlist(arg) or data[arg]
+
+            # Body
+            data.update(request.get_json() or {})
+
+            # Form
+            for field in request.form:
+                data[field] = request.form.getlist(field) or data[field]
+
+            # Flatten single item lists
+            for k in data:
+                if isinstance(data[k], list) and len(data[k]) == 1:
+                    data[k] = data[k][0]
+
+            ip_address = request.environ.get(
+                'HTTP_X_REAL_IP',
+                request.headers.get('X-Forwarded-For', request.remote_addr)
+            )
+
+            if endpoint.recaptcha:
+                # TODO
+                # pass referrer through
+                data['referrer'] = request.args.get('referrer', request.headers.get('REFERER'))
+                return render_template('recaptcha.html', form_data_json=json.dumps(data),
+                                       endpoint_id=endpoint.id)
+
+            # remove `next`
+            try:
+                del data['next']
+            except KeyError:
+                pass
+
+            submission = Submission(
+                data=dict(data),
+                endpoint_id=endpoint.id,
+                referrer=request.args.get('referrer', request.headers.get('REFERER')),
+                user_agent=request.headers.get('USER-AGENT'),
+                ip_address=ip_address,
+            )
+            db.session.add(submission)
+            db.session.commit()
+
+            from formendpoint.tasks import process_submission
+            process_submission.delay(submission.id)
+
+            if 'next' in request.args:
+                return redirect(request.args.get('next'))
+            else:
+                return redirect(url_for('endpoint_success', endpoint_id=endpoint.id,
+                                        _external=True))
+
         elif current_user.is_authenticated:
-            return "You need to create an endpoint."
+            # TODO
+            return "This endpoint does not exist."
         abort(404)
     return render_template('endpoint.html', endpoint=endpoint)
+
+
+@app.route('/<endpoint_id>/recaptcha', methods=["POST"])
+def recaptcha(endpoint_id):
+    endpoint = Endpoint.query.filter_by(id=endpoint_id).first_or_404()
+
+    recaptcha_token = request.args.get('token')
+    res = requests.post(SITE_VERIFY_URL, data={'secret': RECAPTCHA_SECRET_KEY,
+                                               'response': recaptcha_token})
+
+    if res.json()['success']:
+        data = request.get_json()
+        submission = Submission(
+            data=dict(data),
+            endpoint_id=endpoint.id,
+            referrer=request.args.get('referrer', request.headers.get('REFERER')),
+            user_agent=request.headers.get('USER-AGENT'),
+            ip_address=request.environ.get('HTTP_X_REAL_IP',
+                                           request.headers.get('X-Forwarded-For',
+                                                               request.remote_addr)),
+        )
+        db.session.add(submission)
+        db.session.commit()
+
+        from formendpoint.tasks import process_submission
+        process_submission.delay(submission.id)
+
+        if request.args.get('next', data.get('next')):
+            return jsonify(request.args.get('next', data.get('next')))
+        else:
+            return jsonify(url_for('endpoint_success', endpoint_id=endpoint.id))
+
+    else:
+        abort(404)
+
+
+@app.route('/<endpoint_id>/success')
+def endpoint_success(endpoint_id):
+    # TODO
+    return 'Thanks!'
 
 
 @login_required
