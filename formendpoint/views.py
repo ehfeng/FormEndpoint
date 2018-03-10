@@ -11,7 +11,6 @@ from flask import (
     redirect,
     render_template,
     request,
-    send_from_directory,
     url_for
 )
 from flask_login import (
@@ -258,12 +257,6 @@ def delete_submission(submission_id):
 @app.route('/privacy')
 def privacy():
     return render_template('privacy.html')
-
-
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico',
-                               mimetype='image/vnd.microsoft.icon')
 
 ############
 # Endpoint #

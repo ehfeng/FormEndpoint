@@ -27,5 +27,7 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 csrf = CSRFProtect(app)
 
+
+from formendpoint import helpers  # NOQA
 from formendpoint import views  # NOQA
 from formendpoint import cli  # NOQA
