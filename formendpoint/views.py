@@ -51,7 +51,7 @@ def load_user(user_id):
     return User.query.get(user_id)
 
 
-login_manager.login_view = "app.index"
+login_manager.login_view = "index"
 
 
 @app.route('/', methods=['GET', 'POST'])
