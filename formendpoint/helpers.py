@@ -1,10 +1,4 @@
-import os
-
-from flask import (
-    g,
-    render_template,
-    send_from_directory,
-)
+from flask import g, render_template
 
 from app import app, sentry
 
@@ -26,9 +20,3 @@ def page_not_found(e):
 @app.route('/error')
 def test_error():
     assert False
-
-
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory(os.path.join(app.root_path, 'static'),
-                               'favicon.ico', mimetype='image/vnd.microsoft.icon')

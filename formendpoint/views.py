@@ -283,7 +283,9 @@ def endpoint(endpoint_id):
     - referrer: overrides referrer header
     - <name>~: for error messages
     """
-    if endpoint_id is not int:
+    try:
+        endpoint_id = int(endpoint_id)
+    except ValueError:
         abort(404)
 
     endpoint = Endpoint.query.filter_by(id=endpoint_id).first()
