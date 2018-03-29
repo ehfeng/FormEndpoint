@@ -19,19 +19,10 @@
   <div>
     <a class="{% if request.path == url_for('submissions', endpoint_id=endpoint.id) %}inactive-link{% endif %}" href="{{ url_for('submissions', endpoint_id=endpoint.id) }}">Submissions</a>
   </div>
-  <div class="subsection">
-    <div>Spam</div>
-  </div>
 
   <div>
     <a class="{% if request.path == url_for('destinations', endpoint_id=endpoint.id) %}inactive-link{% endif %}" href="{{ url_for('destinations', endpoint_id=endpoint.id) }}">Destinations</a>
   </div>
-  <div class="subsection">
-    <div>Unsubscribers</div>
-  </div>
-
-  <div>Validators</div>
-
   <div>
     <a class="{% if request.path == url_for('support') %}inactive-link{% endif %}" href="{{ url_for('support') }}">Support</a>
   </div>

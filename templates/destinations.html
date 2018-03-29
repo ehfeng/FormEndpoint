@@ -19,7 +19,12 @@
   </tr>
 {% for ed in endpoint.endpoint_destinations %}
 <tr>
-  <td><form method="POST" action="{{ url_for('delete_endpoint_destination', endpoint_id=endpoint, endpoint_destination_id=ed.id) }}"><button>X</button></form></td>
+  <td>
+    <form method="POST" action="{{ url_for('delete_endpoint_destination', endpoint_id=endpoint.id, endpoint_destination_id=ed.id) }}">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}" />
+      <button>X</button>
+    </form>
+  </td>
   <td>{{ ed.destination.human_name }}</td>
 </tr>
 {% endfor %}

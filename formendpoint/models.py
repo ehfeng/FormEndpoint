@@ -231,7 +231,7 @@ class Destination(db.Model):
         """
         raise NotImplemented
 
-    def create_endpoint_destination(self, endpoint, **kwargs):
+    def create_endpoint_destination(self, endpoint, backfill, **kwargs):
         raise NotImplemented
 
     def get_form(self):
@@ -428,7 +428,7 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
 
         return gs['replies'][0]['addSheet']['properties']['sheetId']
 
-    def create_endpoint_destination(self, endpoint, spreadsheet_id):
+    def create_endpoint_destination(self, endpoint, backfill, spreadsheet_id):
         # Get all field types
         fieldnames = endpoint.get_fieldnames()
 
@@ -438,10 +438,17 @@ class GoogleSheet(Destination, PersonalDestinationMixin, GoogleDestinationMixin)
         # Insert column names and associate developer metadata with them
         columns = self.create_endpoint_destination_columns(spreadsheet_id, sheet_id, fieldnames)
 
-        return EndpointDestination(
-            template=self.create_template(spreadsheet_id, sheet_id,
-                                          {f: columns[f]['metadataId'] for f in columns}),
-            destination_id=self.id, endpoint_id=endpoint.id)
+        template = self.create_template(spreadsheet_id, sheet_id,
+                                        {f: columns[f]['metadataId'] for f in columns})
+
+        ed = EndpointDestination(template=template, destination_id=self.id,
+                                 endpoint_id=endpoint.id)
+
+        if backfill:
+            for submission in endpoint.submissions:
+                self.process(submission, ed)
+
+        return ed
 
     def create_row(self, developer_metadata_dict, post):
         row = defaultlist()
@@ -532,15 +539,19 @@ class Gmail(Destination, PersonalDestinationMixin, GoogleDestinationMixin):
         """
         return {'sender': sender, 'subject': subject, 'body': body}
 
-    def create_endpoint_destination(self, endpoint, sender, subject, body):
+    def create_endpoint_destination(self, endpoint, backfill, sender, subject, body):
         env = Environment()
         # Validate
         env.parse(subject)
         env.parse(body)
 
-        return EndpointDestination(template=self.create_template(sender, subject, body),
-                                   endpoint_id=endpoint.id,
-                                   destination_id=self.id)
+        ed = EndpointDestination(template=self.create_template(sender, subject, body),
+                                 endpoint_id=endpoint.id, destination_id=self.id)
+
+        for submission in endpoint.submissions:
+            self.process(submission, ed)
+
+        return ed
 
     def process(self, post, endpoint_destination):
         body_template = Template(endpoint_destination.template['body'])

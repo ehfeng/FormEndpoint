@@ -199,6 +199,8 @@ def create_endpoint_destination(endpoint_id):
             kwargs['subject'] = request.form['subject']
             kwargs['body'] = request.form['body']
 
+        kwargs['backfill'] = request.form['backfill']
+
         dest = cls.query.filter_by(user_id=current_user.id).first_or_404()
         ed = dest.create_endpoint_destination(**kwargs)
         db.session.add(ed)
@@ -230,7 +232,7 @@ def delete_endpoint_destination(endpoint_id, endpoint_destination_id):
     ed = EndpointDestination.query.get(endpoint_destination_id)
     db.session.delete(ed)
     db.session.commit()
-    return redirect(url_for('endpoint_destination', endpoint_id=endpoint_id))
+    return redirect(url_for('destinations', endpoint_id=endpoint_id))
 
 ##############
 # Submission #
