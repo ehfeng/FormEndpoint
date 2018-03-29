@@ -94,6 +94,8 @@ def login_with_validation(validation_hash):
     user = User.query.filter_by(validation_hash=validation_hash).first_or_404()
     if user and user.validation_hash_added and user.validation_hash_added > \
             datetime.datetime.now() - datetime.timedelta(hours=4):
+        user.verified = True
+        db.session.add(user)
         login_user(user)
     return redirect(url_for('index'))
 
