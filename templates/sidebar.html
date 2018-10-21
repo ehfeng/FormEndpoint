@@ -24,6 +24,12 @@
     <a class="{% if request.path == url_for('destinations', endpoint_id=endpoint.id) %}inactive-link{% endif %}" href="{{ url_for('destinations', endpoint_id=endpoint.id) }}">Destinations</a>
   </div>
   <div>
+    <a href="">
+      Settings
+      <!-- endpoint settings here -->
+    </a>
+  </div>
+  <div>
     <a class="{% if request.path == url_for('support') %}inactive-link{% endif %}" href="{{ url_for('support') }}">Support</a>
   </div>
 </div>
