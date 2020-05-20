@@ -27,7 +27,7 @@ furl==1.0.1
 geoip2==2.7.0
 google-api-python-client==1.6.4
 gunicorn==19.7.1
-httplib2==0.10.3
+httplib2==0.18.0
 idna==2.6
 inflection==0.3.1
 itsdangerous==0.24
