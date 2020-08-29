@@ -16,7 +16,7 @@ type server struct {
 }
 
 func (s *server) index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	fmt.Fprint(w, "Welcome!\n")
+	fmt.Fprint(w, "Welcome to FormEndpoint!\n")
 }
 
 func main() {
